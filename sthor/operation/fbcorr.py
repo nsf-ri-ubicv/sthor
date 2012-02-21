@@ -1,4 +1,4 @@
-"""Filterbank Correlation Operation.
+"""5D Filterbank Correlation Operation.
 
 XXX: docstring
 """
@@ -12,31 +12,47 @@ XXX: docstring
 import numpy as np
 from scipy.signal import correlate
 
+def fbcorr(arr_in, arr_fb, arr_out=None, stride=(1, 1, 1, 1)):
+    """XXX: docstring
+    XXX: doctest
+    """
 
-def fbcorr(arr_in, arr_fb, arr_out=None, stride=1, mode='valid'):
-    """XXX: docstring"""
+    # -- parse and check arguments
+    assert arr_in.ndim == 5
+    assert arr_fb.ndim == 5
+    assert arr_fb.dtype == arr_in.dtype
+    assert len(stride) == 4
 
-    # -- check arguments
-    assert arr_in.dtype == arr_fb.dtype
-    assert mode in ('valid', 'same')
+    in_s, in_t, in_h, in_w, in_d = arr_in.shape
+    fb_n, fb_t, fb_h, fb_w, fb_d = arr_fb.shape
+    assert fb_t <= in_t
+    assert fb_h <= in_h
+    assert fb_w <= in_w
+    assert fb_d == in_d
 
-    inh, inw, ind = arr_in.shape
-    fbn, fbh, fbw, fbd = arr_fb.shape
+    stride = np.array(stride, dtype=int)
+    st_t, st_h, st_w, st_d = stride
+    assert (stride > 0).all()
 
-    if mode == 'valid':
-        out_shape = (inh - fbh + 1), (inw - fbw + 1), fbn
-    elif mode == 'same':
-        out_shape = inh, inw, fbn
+    out_s = in_s
+    out_t = (in_t - fb_t) / st_t
+    out_h = (in_h - fb_h) / st_h
+    out_w = (in_w - fb_w) / st_w
+    out_d = (fb_n - 1) / st_d
+    out_shape = out_s, out_t, out_h, out_w, out_d
 
-    # -- Create output array if necessary
+    # -- Create arr_out if necessary
     if arr_out is None:
         arr_out = np.empty(out_shape, dtype=arr_in.dtype)
 
-    assert arr_out.dtype == arr_in.dtype
     assert arr_out.shape == out_shape
+    assert arr_out.dtype == arr_in.dtype
 
     # -- Correlate !
-    for di in xrange(fbn):
-        arr_out[:, :, di] = correlate(arr_in, arr_fb[di], mode=mode)
+    for si in xrange(out_s):
+        for ni in xrange(fb_n):
+            response = correlate(arr_in[si], arr_fb[ni], mode='valid')
+            response = response[::st_t, ::st_h, ::st_w]
+            arr_out[si, :, :, :, ni] = response
 
     return arr_out
