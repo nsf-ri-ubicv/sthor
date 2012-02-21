@@ -10,3 +10,4 @@ Git Commit Conventions
 * DOC: add doc
 * COSMIT: cosmetic change
 * API: api change
+* CLEAN: cleaning up stuff
