@@ -1,3 +1,3 @@
-from fbcorr import fbcorr
-#from lnorm import lnorm
+#from fbcorr import fbcorr
+from lnorm import *
 #from lpool import lpool
