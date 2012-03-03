@@ -13,7 +13,7 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     assert arr_fb.ndim == 4
 
     inh, inw, ind = arr_in.shape
-    fbn, fbh, fbw, fbd = arr_fb.shape
+    fbh, fbw, fbd, fbn = arr_fb.shape
 
     assert fbn > 1
     assert fbh <= inh
@@ -21,17 +21,15 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     assert fbd == ind
 
     # -- reshape arr_in
-    arr_inr = view_as_windows(arr_in, (fbh, fbw, 1))
+    arr_inr = view_as_windows(arr_in, (fbh, fbw, fbd))
     outh, outw = arr_inr.shape[:2]
     arr_inrm = arr_inr.reshape(outh * outw, -1)
 
     # -- reshape arr_fb
-    arr_fb = arr_fb.transpose((0, 3, 1, 2))
-    arr_fbm = arr_fb.reshape(fbn, -1)
+    arr_fbm = arr_fb.reshape((fbh * fbw * fbd, fbn))
 
     # -- correlate !
-    #print 'shape', arr_inrm.shape, arr_fbm.T.shape
-    arr_out = np.dot(arr_inrm, arr_fbm.T)
+    arr_out = np.dot(arr_inrm, arr_fbm)
     arr_out = arr_out.reshape(outh, outw, -1)
 
     return arr_out
@@ -44,18 +42,24 @@ except NameError:
 
 
 def main():
-    arr_in = np.random.randn(200, 200, 64).astype('f')
-    fb = np.random.randn(128, 8, 8, 64).astype('f')
+    #arr_in = np.random.randn(200, 200, 64).astype('f')
+    arr_in = np.random.randn(20, 20, 64).astype('f')
+    fb = np.random.randn(9, 9, 64, 128).astype('f')
 
-    #from pythor3.operation import fbcorr as fbcorr_pt3
+    fb2 = np.ascontiguousarray(fb.transpose(3, 0, 1, 2).copy())
+    print fb2.shape
+    print fb.shape
+ 
+    from pythor3.operation import fbcorr as fbcorr_pt3
 
     import time
     N = 10
     start = time.time()
     for i in xrange(N):
         print i
-        print fbcorr(arr_in, fb).shape
-        #pt3_fbcorr(a, fb, plugin='cthor', plugin_kwargs=dict(variant='sse:tbb'))
+        #gv = fbcorr(arr_in, fb)
+        gt = fbcorr_pt3(arr_in, fb2, plugin='cthor', plugin_kwargs=dict(variant='sse:tbb'))[:]
+        #print np.linalg.norm(gv - gt)
     end = time.time()
     fps = N / (end - start)
     print fps
