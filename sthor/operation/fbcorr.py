@@ -1,50 +1,70 @@
-"""Filterbank Correlation Operation."""
-
-# Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
-#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
-#
-# License: BSD
-
-__all__ = ['fbcorr']
-
-
 import numpy as np
-from scipy.signal import correlate
+from skimage.util.shape import view_as_windows
 
 DEFAULT_STRIDE = 1
 
 
-def fbcorr(arr_in, arr_fb,
-           stride=DEFAULT_STRIDE,
-           arr_out=None):
-    """XXX: docstring"""
+def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
+    """3D Filterbank Correlation
+    XXX: docstring
+    """
 
-    # -- Temporary constraints
-    # XXX: make fbcorr n-dimensional
     assert arr_in.ndim == 3
     assert arr_fb.ndim == 4
 
-    # -- check arguments
-    assert arr_in.dtype == arr_fb.dtype
-
     inh, inw, ind = arr_in.shape
-    fbh, fbw, fbd, fbn = arr_fb.shape
+    fbn, fbh, fbw, fbd = arr_fb.shape
 
+    assert fbn > 1
+    assert fbh <= inh
+    assert fbw <= inw
     assert fbd == ind
 
-    out_shape = (inh - fbh + 1), (inw - fbw + 1), fbn
+    # -- reshape arr_in
+    arr_inr = view_as_windows(arr_in, (fbh, fbw, 1))
+    outh, outw = arr_inr.shape[:2]
+    arr_inrm = arr_inr.reshape(outh * outw, -1)
 
-    # -- Create output array if necessary
-    if arr_out is None:
-        arr_out = np.empty(out_shape, dtype=arr_in.dtype)
+    # -- reshape arr_fb
+    arr_fb = arr_fb.transpose((0, 3, 1, 2))
+    arr_fbm = arr_fb.reshape(fbn, -1)
 
-    assert arr_out.dtype == arr_in.dtype
-    assert arr_out.shape == out_shape
-
-    # -- Correlate !
-    for di in xrange(fbn):
-        filt = arr_fb[..., di]
-        out = correlate(arr_in, filt, mode='valid')
-        arr_out[..., di] = out[..., 0]
+    # -- correlate !
+    #print 'shape', arr_inrm.shape, arr_fbm.T.shape
+    arr_out = np.dot(arr_inrm, arr_fbm.T)
+    arr_out = arr_out.reshape(outh, outw, -1)
 
     return arr_out
+
+
+try:
+    fbcorr = profile(fbcorr)
+except NameError:
+    pass
+
+
+def main():
+    arr_in = np.random.randn(200, 200, 64).astype('f')
+    fb = np.random.randn(128, 8, 8, 64).astype('f')
+
+    #from pythor3.operation import fbcorr as fbcorr_pt3
+
+    import time
+    N = 10
+    start = time.time()
+    for i in xrange(N):
+        print i
+        print fbcorr(arr_in, fb).shape
+        #pt3_fbcorr(a, fb, plugin='cthor', plugin_kwargs=dict(variant='sse:tbb'))
+    end = time.time()
+    fps = N / (end - start)
+    print fps
+    tim = 1. / fps
+    print tim
+
+    flops = np.cumprod(arr_in.shape[:2] + fb.shape)[-1] * 2
+    gflops = (flops / 1e9)
+    print 'gflops / sec', 1. * gflops / tim
+
+if __name__ == '__main__':
+    main()
