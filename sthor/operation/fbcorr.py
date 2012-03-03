@@ -28,6 +28,8 @@ def fbcorr(arr_in, arr_fb, arr_out=None, stride=DEFAULT_STRIDE):
     inh, inw, ind = arr_in.shape
     fbh, fbw, fbd, fbn = arr_fb.shape
 
+    assert fbd == ind
+
     out_shape = (inh - fbh + 1), (inw - fbw + 1), fbn
 
     # -- Create output array if necessary
@@ -40,6 +42,7 @@ def fbcorr(arr_in, arr_fb, arr_out=None, stride=DEFAULT_STRIDE):
     # -- Correlate !
     for di in xrange(fbn):
         filt = arr_fb[..., di]
-        arr_out[..., di] = correlate(arr_in, filt, mode='valid')
+        out = correlate(arr_in, filt, mode='valid')
+        arr_out[..., di] = out[..., 0]
 
     return arr_out
