@@ -33,7 +33,7 @@ ATOL = 1e-6
 def test_input_d_1():
 
     arr_in = np.zeros((2, 3, 1), dtype=DTYPE)
-    arr_fb = np.zeros((4, 1, 1, 1), dtype=DTYPE)
+    arr_fb = np.zeros((1, 1, 1, 4), dtype=DTYPE)
     arr_out = np.zeros((2, 3, 4), dtype=DTYPE)
 
     arr_in[:] = np.arange(np.prod(arr_in.shape)).reshape(arr_in.shape)
@@ -57,14 +57,14 @@ def test_input_d_1():
 def test_one_dot():
 
     arr_in = np.zeros((3, 3, 4), dtype=DTYPE)
-    arr_fb = np.zeros((8, 3, 3, 4), dtype=DTYPE)
+    arr_fb = np.zeros((3, 3, 4, 8), dtype=DTYPE)
     arr_out = np.zeros((1, 1, 8), dtype=DTYPE)
 
     arr_in[:] = np.arange(np.prod(arr_in.shape)).reshape(arr_in.shape)
     arr_fb[:] = np.arange(np.prod(arr_fb.shape)).reshape(arr_fb.shape)
 
-    gt = np.array([[[  14910.,   37590.,   60270.,   82950.,
-                       105630.,  128310., 150990.,  173670.]]],
+    gt = np.array([[[  119280., 119910., 120540., 121170.,
+                       121800., 122430., 123060., 123690.]]],
                   dtype=DTYPE)
 
     fbcorr(arr_in, arr_fb, arr_out=arr_out)
@@ -76,8 +76,8 @@ def test_one_dot():
 
 def test_arr_out_2d():
 
-    arr_in = np.zeros((20, 30), dtype=DTYPE)
-    arr_fb = np.zeros((8, 3, 3), dtype=DTYPE)
+    arr_in = np.zeros((20, 30, 1), dtype=DTYPE)
+    arr_fb = np.zeros((3, 3, 1, 8), dtype=DTYPE)
     arr_out = np.zeros((18, 28, 8), dtype=DTYPE)
 
     arr_in[:] = np.arange(np.prod(arr_in.shape)).reshape(arr_in.shape)
