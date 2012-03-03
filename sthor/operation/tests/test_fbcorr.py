@@ -16,7 +16,7 @@ from numpy.testing import assert_allclose
 import numpy as np
 from scipy.misc import lena
 
-from sthor.operation.fbcorr import fbcorr
+from sthor.operation import fbcorr
 
 # -- Raise exceptions on floating-point errors
 np.seterr(all='raise')

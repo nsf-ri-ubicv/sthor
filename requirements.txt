@@ -1,2 +1,4 @@
 numpy>=1.6.1
 scipy>=0.10.0
+numexpr>=2.0.1
+scikits-image>=0.5
