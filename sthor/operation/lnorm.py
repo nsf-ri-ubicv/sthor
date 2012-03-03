@@ -66,24 +66,3 @@ def lcdnorm3(arr_in, neighborhood, threshold=DEFAULT_THRESHOLD,
         arr_out = _arr_out
 
     return arr_out
-
-try:
-    lnorm = profile(lnorm)
-except NameError:
-    pass
-
-
-def main():
-    a = np.random.randn(100, 100, 32).astype('f')
-
-    N = 10
-    import time
-    start = time.time()
-    for i in xrange(N):
-        print i
-        out = lcdnorm3(a, (5, 5))
-    end = time.time()
-    print N / (end - start)
-
-if __name__ == '__main__':
-    main()
