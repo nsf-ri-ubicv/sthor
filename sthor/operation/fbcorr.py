@@ -1,7 +1,7 @@
 """Filterbank Correlation Operation."""
 
 # Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
-#          Nicolas Poilver <nicolas.poilvert@gmail.com>
+#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
 #
 # License: BSD
 

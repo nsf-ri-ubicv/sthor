@@ -34,6 +34,11 @@ def lpool3(arr_in, neighborhood,
     xpr = view_as_windows(xp, win_shape)[::stride, ::stride]
     xprm = xpr.reshape(xpr.shape[:3] + (-1,))
     xprms = xprm.sum(-1)
-    arr_out = xprms ** (1.0 / order)
+    _arr_out = xprms ** (1.0 / order)
+
+    if arr_out is not None:
+        arr_out[:] = _arr_out
+    else:
+        arr_out = _arr_out
 
     return arr_out
