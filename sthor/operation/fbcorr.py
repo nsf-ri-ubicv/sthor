@@ -14,7 +14,9 @@ from scipy.signal import correlate
 DEFAULT_STRIDE = 1
 
 
-def fbcorr(arr_in, arr_fb, arr_out=None, stride=DEFAULT_STRIDE):
+def fbcorr(arr_in, arr_fb,
+           stride=DEFAULT_STRIDE,
+           arr_out=None):
     """XXX: docstring"""
 
     # -- Temporary constraints
