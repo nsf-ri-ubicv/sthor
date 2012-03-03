@@ -1,16 +1,9 @@
-"""
-Unit Test Suite for Local Pooling Operation.
-
-This suite tests basic functionalities of the `lpool` operation.
-It should be used by all plugins/implementations of the operation.
-"""
-
-# TODO: complete the test suite.
-# TODO: make nosetests verbose more explicit to help debug when tests fail
+"""Test Suite for Local Pooling Operations"""
 
 # Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
+#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
 #
-# License: Proprietary
+# License: BSD
 
 
 # -- Imports

@@ -1,7 +1,7 @@
 """Unit Test Suite for Local Normalization Operations"""
 
 # Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
-#          Nicolas Poilvert <nicolas.pinto@gmail.com>
+#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
 #
 # License: BSD
 
