@@ -7,7 +7,7 @@
 
 import numpy as np
 
-from sthor.operation import lcdnorm3
+from sthor.operation import ldnorm3, lcdnorm3
 from sthor.operation import fbcorr
 from sthor.operation import lpool3
 
@@ -25,181 +25,244 @@ from pythor3 import plugin_library
 
 class SequentialLayeredModel(object):
 
-    def __init__(self, input_shape, description):
+    def __init__(self, in_shape, description):
         """XXX: docstring for __init__"""
 
         pprint(description)
-        print input_shape
-        assert len(input_shape) == 2 or len(input_shape) == 3
-
         self.description = description
-        self.filterbanks = []
+
+        self.in_shape = in_shape
+
+        self.filterbanks = {}
+
+        try:
+            self.process = profile(self.process)
+        except NameError:
+            pass
 
     def process(self, arr_in):
         """XXX: docstring for process"""
 
         description = self.description
+        filterbanks = self.filterbanks
+
+        assert arr_in.shape == self.in_shape
+        input_shape = arr_in.shape
+        assert len(input_shape) == 2 or len(input_shape) == 3
+
+        if len(input_shape) == 3:
+            tmp_out = arr_in
+        elif len(input_shape) == 2:
+            tmp_out = arr_in[..., np.newaxis]
+        else:
+            raise ValueError("The input array should be 2D or 3D")
 
         for layer_idx, layer_desc in enumerate(description):
 
-            #operation_l = []
+            for op_idx, (op_name, op_params) in enumerate(layer_desc):
 
-            for op_name, op_params in layer_desc:
+                #print op_name
+                #print op_params
 
-                print op_name
-                print op_params
+                if op_name == 'lnorm':
 
-                #curr_arr_in = last_arr_out
-                #op_d = {}
-                #assert op_name in ALLOWED_OPERATIONS
+                    kwargs = op_params['kwargs']
 
-                #pclass = plugin_library['operation.' + op_name][plugin_mapping[op_name]['plugin']]
-                #args = [curr_arr_in]
+                    inker_shape = kwargs['inker_shape']
+                    outker_shape = kwargs['outker_shape']
+                    remove_mean = kwargs['remove_mean']
+                    stretch = kwargs['stretch']
+                    threshold = kwargs['threshold']
 
-                #if op_name == 'fbcorr':
-                    #curr_arr_fb = self._get_filterbank(curr_arr_in,
-                                                       #op_params['initialize'])
-                    #args += [curr_arr_fb]
-                    #op_d['arr_fb'] = curr_arr_fb
+                    # SLM PLoS09 / FG11 constraints:
+                    assert inker_shape == outker_shape
 
-                #kwargs = op_params['kwargs']
+                    tmp_in = tmp_out * stretch
 
-                #log.info(pclass)
-                ##print op_params, kwargs
-                #pobj = pclass(**plugin_mapping[op_name]['plugin_kwargs'])
-                #curr_arr_out = pobj.prepare(*args, **kwargs)
-                #pobj.specialize(*args, arr_out=curr_arr_out, **kwargs)
+                    if remove_mean:
+                        tmp_out = lcdnorm3(tmp_in, inker_shape, threshold=threshold)
+                    else:
+                        tmp_out = ldnorm3(tmp_in, inker_shape, threshold=threshold)
 
-                #op_d['name'] = op_name
-                #op_d['arr_in'] = curr_arr_in
-                #op_d['arr_out'] = curr_arr_out
-                #op_d['plugin_instance'] = pobj
+                elif op_name == 'fbcorr':
 
-                #operation_l += [op_d]
+                    tmp_in = tmp_out
 
-                #last_arr_out = curr_arr_out
+                    kwargs = op_params['kwargs']
+                    max_out = kwargs['max_out']
+                    min_out = kwargs['min_out']
 
-            #layers += [operation_l]
+                    fbkey = layer_idx, op_idx
+                    if fbkey not in filterbanks:
+                        initialize = op_params['initialize']
+                        filter_shape = initialize['filter_shape']
+                        generate = initialize['generate']
+                        n_filters = initialize['n_filters']
 
-            #return arr_out
+                        fb_shape = (n_filters,) + filter_shape + (tmp_in.shape[-1],)
 
-def pt3slm(arr_in):
+                        # generate filterbank data
+                        method_name, method_kwargs = generate
+                        assert method_name == 'random:uniform'
 
-    assert arr_in.ndim == 3
-    inh, inw, ind = arr_in.shape
+                        rseed = method_kwargs.get('rseed', None)
+                        rng = np.random.RandomState(rseed)
 
+                        fb = rng.uniform(size=fb_shape)
 
-    for nf in nfs:
-        fbshape = (nf,) + nb + (arr_in.shape[-1],)
-        fb1 = np.random.randn(*fbshape).astype('f')
-        n1 = pt3lnorm(arr_in, inker_shape=nb, outker_shape=nb, threshold=1.0,
-                      plugin='cthor', plugin_kwargs=dict(variant='sse:tbb'))
-        f1 = pt3fbcorr(n1, fb1,
-                       plugin='cthor', plugin_kwargs=dict(variant='sse:tbb'))
-        p1 = pt3lpool(f1, ker_shape=nb, order=2, stride=2,
-                      plugin='cthor', plugin_kwargs=dict(variant='sse:tbb'))
-        arr_in = p1
+                        for fidx in xrange(n_filters):
+                            filt = fb[fidx]
+                            # zero-mean, unit-l2norm
+                            filt -= filt.mean()
+                            filt_norm = np.linalg.norm(filt)
+                            assert filt_norm != 0
+                            filt /= filt_norm
+                            fb[fidx] = filt
 
-    return p1
+                        fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4))
 
-def slm(arr_in):
+                        filterbanks[fbkey] = fb
+                        print fb.shape
 
-    assert arr_in.ndim == 3
-    inh, inw, ind = arr_in.shape
+                    fb = filterbanks[fbkey]
 
-    fbs = []
-    fbd = arr_in.shape[-1]
+                    # -- filter
+                    tmp_out = fbcorr(tmp_in, fb)
 
-    for nf in nfs:
-        fbshape = nb + (fbd, nf)
-        print 'generating', fbshape, 'filterbank'
-        fb = np.random.randn(*fbshape).astype('f')
-        fbs += [fb]
-        fbd = nf
- 
-    #for nf in nfs:
-    for fb in fbs:
-        n1 = lcdnorm3(arr_in, nb, threshold=1.0)
-        f1 = fbcorr(n1, fb)
-        p1 = lpool3(f1, nb, order=2, stride=2)
-        arr_in = p1
+                    # -- activation
+                    min_out = -np.inf if min_out is None else min_out
+                    max_out = +np.inf if max_out is None else max_out
+                    tmp_out = tmp_out.clip(min_out, max_out)
 
-    return p1
+                elif op_name == 'lpool':
+
+                    tmp_in = tmp_out
+
+                    kwargs = op_params['kwargs']
+                    ker_shape = kwargs['ker_shape']
+                    order = kwargs['order']
+                    stride = kwargs['stride']
+
+                    tmp_out = lpool3(tmp_in, ker_shape, order=order, stride=stride)
+
+                else:
+                    raise ValueError("operation '%s' not understood" % op_name)
+
+                #print tmp_out.shape
+
+        return tmp_out
+
 
 def main():
 
+    import genson
+    from os import path
+    from numpy.testing import assert_allclose
 
-    desc = \
-    [[('lnorm',
-       {'kwargs': {'inker_shape': (9, 9),
-                   'outker_shape': (9, 9),
-                   'remove_mean': False,
-                   'stretch': 1,
-                   'threshold': 0.10000000000000001}})],
-     [('fbcorr',
-       {'initialize': {'filter_shape': (9, 9),
-                       'generate': ('random:uniform', {'rseed': 42}),
-                       'n_filters': 64},
-        'kwargs': {'max_out': None, 'min_out': None}}),
-      ('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 1, 'stride': 2}}),
-      ('lnorm',
-       {'kwargs': {'inker_shape': (5, 5),
-                   'outker_shape': (5, 5),
-                   'remove_mean': False,
-                   'stretch': 0.10000000000000001,
-                   'threshold': 0.10000000000000001}})],
-     [('fbcorr',
-       {'initialize': {'filter_shape': (9, 9),
-                       'generate': ('random:uniform', {'rseed': 42}),
-                       'n_filters': 64},
-        'kwargs': {'max_out': None, 'min_out': None}}),
-      ('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 10, 'stride': 2}}),
-      ('lnorm',
-       {'kwargs': {'inker_shape': (3, 3),
-                   'outker_shape': (3, 3),
-                   'remove_mean': True,
-                   'stretch': 10,
-                   'threshold': 0.10000000000000001}})],
-     [('fbcorr',
-       {'initialize': {'filter_shape': (9, 9),
-                       'generate': ('random:uniform', {'rseed': 42}),
-                       'n_filters': 16},
-        'kwargs': {'max_out': 1, 'min_out': None}}),
-      ('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
-      ('lnorm',
-       {'kwargs': {'inker_shape': (3, 3),
-                   'outker_shape': (3, 3),
-                   'remove_mean': False,
-                   'stretch': 1,
-                   'threshold': 1}})],
-     [('fbcorr',
-       {'initialize': {'filter_shape': (9, 9),
-                       'generate': ('random:uniform', {'rseed': 42}),
-                       'n_filters': 64},
-        'kwargs': {'max_out': 1, 'min_out': None}}),
-      ('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 10, 'stride': 2}}),
-      ('lnorm',
-       {'kwargs': {'inker_shape': (5, 5),
-                   'outker_shape': (5, 5),
-                   'remove_mean': True,
-                   'stretch': 0.10000000000000001,
-                   'threshold': 10}})]]
+    mypath = path.dirname(__file__)
 
-    in_shape = 200, 200
-    slm = SequentialLayeredModel(in_shape, desc)
-    raise
+    RTOL = 1e-2
+    ATOL = 1e-4
 
-    a = np.random.randn(200, 200, 1).astype('f')
+    while True:
+        with open(path.join(mypath, 'plos09.gson')) as fin:
+            gen = genson.loads(fin.read())
 
-    import time
-    N = 10
-    start = time.time()
-    for i in xrange(N):
-        out = slm(a)
-        #out = pt3slm(a)
-        print out.shape
-    end = time.time()
-    print N / (end - start)
+        desc = gen.next()
+
+    #desc = \
+    #[[('lnorm',
+       #{'kwargs': {'inker_shape': (5, 5),
+                   #'outker_shape': (5, 5),
+                   #'remove_mean': True,
+                   #'stretch': 1,
+                   #'threshold': 0.1}})],
+     #[('fbcorr',
+       #{'initialize': {'filter_shape': (7, 7),
+                       #'generate': ('random:uniform', {'rseed': 42}),
+                       #'n_filters': 64},
+        #'kwargs': {'max_out': None, 'min_out': None}}),
+      #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 1, 'stride': 2}}),
+      #('lnorm',
+       #{'kwargs': {'inker_shape': (5, 5),
+                   #'outker_shape': (5, 5),
+                   #'remove_mean': False,
+                   #'stretch': 0.1,
+                   #'threshold': 0.1}})
+     #],
+     #[('fbcorr',
+       #{'initialize': {'filter_shape': (5, 5),
+                       #'generate': ('random:uniform', {'rseed': 42}),
+                       #'n_filters': 64},
+        #'kwargs': {'max_out': None, 'min_out': None}}),
+      #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
+      #('lnorm',
+       #{'kwargs': {'inker_shape': (3, 3),
+                   #'outker_shape': (3, 3),
+                   #'remove_mean': True,
+                   #'stretch': 10,
+                   #'threshold': 0.1}})
+     #],
+     #[('fbcorr',
+       #{'initialize': {'filter_shape': (9, 9),
+                       #'generate': ('random:uniform', {'rseed': 42}),
+                       #'n_filters': 16},
+        #'kwargs': {'max_out': 1, 'min_out': None}}),
+      #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
+      #('lnorm',
+       #{'kwargs': {'inker_shape': (3, 3),
+                   #'outker_shape': (3, 3),
+                   #'remove_mean': True,
+                   #'stretch': 1,
+                   #'threshold': 1}})]
+    #]
+
+        in_shape = 200, 200, 1
+
+        from pythor3 import model
+        slm_gt = model.slm.SequentialLayeredModel(
+            in_shape, desc,
+            plugin='passthrough',
+            plugin_kwargs={
+                'plugin_mapping':{
+                    'all':{
+                        'plugin':'cthor',
+                        #'plugin_kwargs': {'variant': 'icc:sse:tbb'},
+                        'plugin_kwargs': {'variant': 'sse:tbb'},
+                    }
+                }
+            })
+
+        slm_gv = SequentialLayeredModel(in_shape, desc)
+
+
+        import time
+        N = 10
+        gt_time = 0
+        gv_time = 0
+        for i in xrange(N):
+            a = np.random.randn(200, 200, 1).astype('f')
+            a -= a.min()
+            a /= a.max()
+
+            start = time.time()
+            try:
+                gt = slm_gt.process(a)
+            except ValueError:
+                continue
+            gt_time += time.time() - start
+
+            start = time.time()
+            gv = slm_gv.process(a)
+            gv_time += time.time() - start
+
+            print 'abs max', np.absolute(gv - gt).max()
+            #assert np.absolute(gv - gt).max() < 1e-3
+            assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
+
+        print 'gv fps', N / gv_time
+        print 'gt fps', N / gt_time
+        print 'speedup', gt_time / gv_time
 
 if __name__ == '__main__':
     main()

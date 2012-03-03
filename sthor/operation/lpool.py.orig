@@ -8,14 +8,11 @@
 __all__ = ['lpool3']
 
 import numpy as np
-import numexpr as ne
+#import numexpr as ne
 from skimage.util.shape import view_as_windows
 
 DEFAULT_STRIDE = 1
 DEFAULT_ORDER = 1.0
-
-assert ne.use_vml
-ne.set_num_threads(8)
 
 
 def lpool3(arr_in, neighborhood,
@@ -32,12 +29,12 @@ def lpool3(arr_in, neighborhood,
     order = np.float32(order)
     stride = np.int(stride)
 
-    nbh, nbw = neighborhood
-
-    _arr_out = ne.evaluate('arr_in ** order')
-    _arr_out = np.squeeze(view_as_windows(_arr_out, (1, nbw, 1)).sum(-2))[:, ::stride]
-    _arr_out = np.squeeze(view_as_windows(_arr_out, (nbh, 1, 1)).sum(-3))[::stride, :]
-    _arr_out = ne.evaluate('_arr_out ** (1.0 / order)')
+    xp = arr_in ** order
+    win_shape = neighborhood + (1,)
+    xpr = view_as_windows(xp, win_shape)[::stride, ::stride]
+    xprm = xpr.reshape(xpr.shape[:3] + (-1,))
+    xprms = xprm.sum(-1)
+    _arr_out = xprms ** (1.0 / order)
 
     if arr_out is not None:
         arr_out[:] = _arr_out
@@ -45,9 +42,3 @@ def lpool3(arr_in, neighborhood,
         arr_out = _arr_out
 
     return arr_out
-
-try:
-    lpool3 = profile(lpool3)
-except NameError:
-    pass
-
