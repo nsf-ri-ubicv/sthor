@@ -7,7 +7,7 @@
 
 import numpy as np
 
-from sthor.operation import ldnorm3, lcdnorm3
+from sthor.operation import lcdnorm3
 from sthor.operation import fbcorr
 from sthor.operation import lpool3
 
@@ -63,10 +63,11 @@ class SequentialLayeredModel(object):
 
                 #print op_name
                 #print op_params
+                tmp_in = tmp_out
+
+                kwargs = op_params['kwargs']
 
                 if op_name == 'lnorm':
-
-                    kwargs = op_params['kwargs']
 
                     inker_shape = kwargs['inker_shape']
                     outker_shape = kwargs['outker_shape']
@@ -77,18 +78,13 @@ class SequentialLayeredModel(object):
                     # SLM PLoS09 / FG11 constraints:
                     assert inker_shape == outker_shape
 
-                    tmp_in = tmp_out * stretch
-
-                    if remove_mean:
-                        tmp_out = lcdnorm3(tmp_in, inker_shape, threshold=threshold)
-                    else:
-                        tmp_out = ldnorm3(tmp_in, inker_shape, threshold=threshold)
+                    tmp_out = lcdnorm3(tmp_in, inker_shape,
+                                       contrast=remove_mean,
+                                       stretch=stretch,
+                                       threshold=threshold)
 
                 elif op_name == 'fbcorr':
 
-                    tmp_in = tmp_out
-
-                    kwargs = op_params['kwargs']
                     max_out = kwargs['max_out']
                     min_out = kwargs['min_out']
 
@@ -136,9 +132,6 @@ class SequentialLayeredModel(object):
 
                 elif op_name == 'lpool':
 
-                    tmp_in = tmp_out
-
-                    kwargs = op_params['kwargs']
                     ker_shape = kwargs['ker_shape']
                     order = kwargs['order']
                     stride = kwargs['stride']
@@ -158,17 +151,159 @@ def main():
     import genson
     from os import path
     from numpy.testing import assert_allclose
+    from pythor3.utils.testing import assert_allclose_round
 
     mypath = path.dirname(__file__)
 
     RTOL = 1e-2
     ATOL = 1e-4
 
+    # -- Raise exceptions on floating-point errors
+    np.seterr(all='raise')
+
+    iter = 0
     while True:
         with open(path.join(mypath, 'plos09.gson')) as fin:
             gen = genson.loads(fin.read())
 
         desc = gen.next()
+        genson.default_random_seed = 1
+
+        #desc = \
+                #[[('lnorm',
+   #{'kwargs': {'inker_shape': (7, 7),
+               #'outker_shape': (7, 7),
+               #'remove_mean': True,
+               #'stretch': 1,
+               #'threshold': 0.10000000000000001}})],
+ #[('fbcorr',
+   #{'initialize': {'filter_shape': (7, 7),
+                   #'generate': ('random:uniform', {'rseed': 42}),
+                   #'n_filters': 64},
+    #'kwargs': {'max_out': 1, 'min_out': 0}}),
+  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 2, 'stride': 2}}),
+  #('lnorm',
+   #{'kwargs': {'inker_shape': (7, 7),
+               #'outker_shape': (7, 7),
+               #'remove_mean': True,
+               #'stretch': 0.10000000000000001,
+               #'threshold': 10}})],
+ #[('fbcorr',
+   #{'initialize': {'filter_shape': (9, 9),
+                   #'generate': ('random:uniform', {'rseed': 42}),
+                   #'n_filters': 32},
+    #'kwargs': {'max_out': 1, 'min_out': 0}}),
+  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 1, 'stride': 2}}),
+  #('lnorm',
+   #{'kwargs': {'inker_shape': (9, 9),
+               #'outker_shape': (9, 9),
+               #'remove_mean': False,
+               #'stretch': 0.10000000000000001,
+               #'threshold': 0.10000000000000001}})],
+ #[('fbcorr',
+   #{'initialize': {'filter_shape': (3, 3),
+                   #'generate': ('random:uniform', {'rseed': 42}),
+                   #'n_filters': 256},
+    #'kwargs': {'max_out': 1, 'min_out': 0}}),
+  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 10, 'stride': 2}}),
+  #('lnorm',
+   #{'kwargs': {'inker_shape': (3, 3),
+               #'outker_shape': (3, 3),
+               #'remove_mean': False,
+               #'stretch': 10,
+               #'threshold': 10}})]
+#]
+
+
+        #desc = \
+                #[[('lnorm',
+   #{'kwargs': {'inker_shape': (7, 7),
+               #'outker_shape': (7, 7),
+               #'remove_mean': True,
+               #'stretch': 1,
+               #'threshold': 0.10000000000000001}})],
+ #[('fbcorr',
+   #{'initialize': {'filter_shape': (3, 3),
+                   #'generate': ('random:uniform', {'rseed': 42}),
+                   #'n_filters': 32},
+    #'kwargs': {'max_out': None, 'min_out': None}}),
+  #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 10, 'stride': 2}}),
+  #('lnorm',
+   #{'kwargs': {'inker_shape': (3, 3),
+               #'outker_shape': (3, 3),
+               #'remove_mean': True,
+               #'stretch': 1,
+               #'threshold': 10}})],
+ #[('fbcorr',
+   #{'initialize': {'filter_shape': (9, 9),
+                   #'generate': ('random:uniform', {'rseed': 42}),
+                   #'n_filters': 32},
+    #'kwargs': {'max_out': 1, 'min_out': None}}),
+  #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
+  #('lnorm',
+   #{'kwargs': {'inker_shape': (9, 9),
+               #'outker_shape': (9, 9),
+               #'remove_mean': False,
+               #'stretch': 1,
+               #'threshold': 0.10000000000000001}})],
+ #[('fbcorr',
+   #{'initialize': {'filter_shape': (9, 9),
+                   #'generate': ('random:uniform', {'rseed': 42}),
+                   #'n_filters': 256},
+    #'kwargs': {'max_out': 1, 'min_out': 0}}),
+  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 2, 'stride': 2}}),
+  #('lnorm',
+   #{'kwargs': {'inker_shape': (9, 9),
+               #'outker_shape': (9, 9),
+               #'remove_mean': True,
+               #'stretch': 1,
+               #'threshold': 1}})]]
+
+        #desc = \
+                #[[('lnorm',
+                   #{'kwargs': {'inker_shape': (7, 7),
+                               #'outker_shape': (7, 7),
+                               ##'remove_mean': False,
+                               #'remove_mean': True,
+                               #'stretch': 10,
+                               #'threshold': 10}})],
+                 ###[('fbcorr',
+                   ###{'initialize': {'filter_shape': (5, 5),
+                                   ###'generate': ('random:uniform', {'rseed': 42}),
+                                   ##'n_filters': 16},
+                    ##'kwargs': {'max_out': None, 'min_out': 0}}),
+                  ##('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 10, 'stride': 2}}),
+                  ##('lnorm',
+                   ##{'kwargs': {'inker_shape': (9, 9),
+                               ##'outker_shape': (9, 9),
+                               ##'remove_mean': True,
+                               ##'stretch': 10,
+                               ##'threshold': 0.10000000000000001}})],
+                 ##[('fbcorr',
+                   ##{'initialize': {'filter_shape': (3, 3),
+                                   ##'generate': ('random:uniform', {'rseed': 42}),
+                                   ##'n_filters': 16},
+                    ##'kwargs': {'max_out': 1, 'min_out': 0}}),
+                  ##('lpool', {'kwargs': {'ker_shape': (7, 7), 'order': 2, 'stride': 2}}),
+                  ##('lnorm',
+                   ##{'kwargs': {'inker_shape': (7, 7),
+                               ##'outker_shape': (7, 7),
+                               ##'remove_mean': False,
+                               ##'stretch': 1,
+                               ##'threshold': 10}})],
+                 ##[('fbcorr',
+                   ##{'initialize': {'filter_shape': (5, 5),
+                                   ##'generate': ('random:uniform', {'rseed': 42}),
+                                   ##'n_filters': 32},
+                    ##'kwargs': {'max_out': 1, 'min_out': 0}}),
+                  ##('lpool', {'kwargs': {'ker_shape': (3, 3), 'order': 2, 'stride': 2}}),
+                  ##('lnorm',
+                   ##{'kwargs': {'inker_shape': (5, 5),
+                               ##'outker_shape': (5, 5),
+                               ##'remove_mean': True,
+                               ##'stretch': 10,
+                               ##'threshold': 1}})]
+                #]
 
     #desc = \
     #[[('lnorm',
@@ -220,45 +355,71 @@ def main():
         in_shape = 200, 200, 1
 
         from pythor3 import model
-        slm_gt = model.slm.SequentialLayeredModel(
-            in_shape, desc,
-            plugin='passthrough',
-            plugin_kwargs={
-                'plugin_mapping':{
-                    'all':{
-                        'plugin':'cthor',
-                        #'plugin_kwargs': {'variant': 'icc:sse:tbb'},
-                        'plugin_kwargs': {'variant': 'sse:tbb'},
+        print 'create gt slm'
+        try:
+            slm_gt = model.slm.SequentialLayeredModel(
+                in_shape, desc,
+                plugin='passthrough',
+                plugin_kwargs={
+                    'plugin_mapping':{
+                        'all':{
+                            'plugin':'scipy_naive',
+                            'plugin_kwargs': {},
+                            #'plugin':'cthor',
+                            #'plugin_kwargs': {'variant': 'icc:sse:tbb'},
+                            #'plugin_kwargs': {'variant': 'sse:tbb'},
+                        }
                     }
-                }
-            })
+                })
+        except ValueError, err:
+            print err
+            continue
 
+        print 'create gv slm'
         slm_gv = SequentialLayeredModel(in_shape, desc)
 
+        from scipy import misc
+        a = misc.lena()
+        a = misc.imresize(a, (200, 200)) / 1.0
+        a.shape = a.shape[:2] + (1,)
+        a -= a.min()
+        a /= a.max()
 
         import time
-        N = 10
+        N = 1
         gt_time = 0
         gv_time = 0
         for i in xrange(N):
-            a = np.random.randn(200, 200, 1).astype('f')
-            a -= a.min()
-            a /= a.max()
+            #iter += 1
+            #print 'iter', iter
+            #np.random.seed(iter)
+            #np.random.seed(20)
+            #a = np.random.randn(200, 200, 1).astype('f')
+            #a -= a.min()
+            #a /= a.max()
 
+            #print 'a.mean()', a.mean()
+            #print 'np.linalg.norm(a)', np.linalg.norm(a)
+
+            a = a.copy()
             start = time.time()
-            try:
-                gt = slm_gt.process(a)
-            except ValueError:
-                continue
+            gt = slm_gt.process(a)
             gt_time += time.time() - start
 
+            a = a.copy()
             start = time.time()
             gv = slm_gv.process(a)
             gv_time += time.time() - start
 
+            print 'norm', np.linalg.norm(gv - gt)
             print 'abs max', np.absolute(gv - gt).max()
+            tmp = np.absolute(gv - gt)
+            print tmp.ravel().argmax()
+            print gv[tmp == tmp.max()]
+            print gt[tmp == tmp.max()]
             #assert np.absolute(gv - gt).max() < 1e-3
-            assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
+            #assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)
+            #assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
 
         print 'gv fps', N / gv_time
         print 'gt fps', N / gt_time
