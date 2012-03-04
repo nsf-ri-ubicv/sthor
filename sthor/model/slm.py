@@ -152,6 +152,8 @@ def main():
     from os import path
     from numpy.testing import assert_allclose
     from pythor3.utils.testing import assert_allclose_round
+    from thoreano.slm import TheanoSLM
+
 
     mypath = path.dirname(__file__)
 
@@ -161,6 +163,9 @@ def main():
     # -- Raise exceptions on floating-point errors
     np.seterr(all='raise')
 
+    gt_time = 0
+    gv_time = 0
+
     iter = 0
     while True:
         with open(path.join(mypath, 'plos09.gson')) as fin:
@@ -168,6 +173,7 @@ def main():
 
         desc = gen.next()
         genson.default_random_seed = 1
+
 
         #desc = \
                 #[[('lnorm',
@@ -363,11 +369,11 @@ def main():
                 plugin_kwargs={
                     'plugin_mapping':{
                         'all':{
-                            'plugin':'scipy_naive',
-                            'plugin_kwargs': {},
-                            #'plugin':'cthor',
+                            #'plugin':'scipy_naive',
+                            #'plugin_kwargs': {},
+                            'plugin':'cthor',
                             #'plugin_kwargs': {'variant': 'icc:sse:tbb'},
-                            #'plugin_kwargs': {'variant': 'sse:tbb'},
+                            'plugin_kwargs': {'variant': 'sse:tbb'},
                         }
                     }
                 })
@@ -377,6 +383,8 @@ def main():
 
         print 'create gv slm'
         slm_gv = SequentialLayeredModel(in_shape, desc)
+        #slm_gt = TheanoSLM((200, 200, 1), desc)
+        #slm_gv = TheanoSLM((200, 200, 1), desc)
 
         from scipy import misc
         a = misc.lena()
@@ -386,9 +394,12 @@ def main():
         a /= a.max()
 
         import time
-        N = 1
-        gt_time = 0
-        gv_time = 0
+        W = 2
+        for i in xrange(W):
+            slm_gt.process(a)
+            slm_gv.process(a)
+
+        N = 10
         for i in xrange(N):
             #iter += 1
             #print 'iter', iter
@@ -421,8 +432,8 @@ def main():
             #assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)
             #assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
 
-        print 'gv fps', N / gv_time
-        print 'gt fps', N / gt_time
+        #print 'gv fps', N / gv_time
+        #print 'gt fps', N / gt_time
         print 'speedup', gt_time / gv_time
 
 if __name__ == '__main__':
