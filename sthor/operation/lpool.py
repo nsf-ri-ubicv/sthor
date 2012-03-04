@@ -32,7 +32,10 @@ def lpool3(arr_in, neighborhood,
     order = np.float32(order)
     stride = np.int(stride)
 
+    inh, inw, ind = arr_in.shape
     nbh, nbw = neighborhood
+    assert nbh <= inh
+    assert nbw <= inw
 
     _arr_out = ne.evaluate('arr_in ** order')
     _arr_out = np.squeeze(view_as_windows(_arr_out, (1, nbw, 1)).sum(-2))[:, ::stride]

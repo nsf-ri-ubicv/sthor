@@ -5,19 +5,29 @@
 #
 # License: BSD
 
-__all__ = ['ldnorm3', 'lcdnorm3']
+__all__ = ['lcdnorm3']
 
 import numpy as np
 
 from skimage.util.shape import view_as_windows
 
-EPSILON = 1e-6
+EPSILON = 1e-4
 DEFAULT_STRIDE = 1
 DEFAULT_THRESHOLD = 1.0
+DEFAULT_STRETCH = 1.0
+DEFAULT_CONTRAST = True
+DEFAULT_DIVISIVE = True
 
 
-def lcdnorm3(arr_in, neighborhood, threshold=DEFAULT_THRESHOLD,
-            stride=DEFAULT_STRIDE, arr_out=None):
+def lsum2(arr_in, neighborhood, stride=DEFAULT_STRIDE):
+    pass
+
+def lcdnorm3(arr_in, neighborhood,
+             contrast=DEFAULT_CONTRAST,
+             divisive=DEFAULT_DIVISIVE,
+             stretch=DEFAULT_STRETCH,
+             threshold=DEFAULT_THRESHOLD,
+             stride=DEFAULT_STRIDE, arr_out=None):
     """3D Local Contrast Divisive Normalization
 
     XXX: docstring
@@ -25,11 +35,17 @@ def lcdnorm3(arr_in, neighborhood, threshold=DEFAULT_THRESHOLD,
 
     assert arr_in.ndim == 3
     assert len(neighborhood) == 2
+    assert isinstance(contrast, bool)
+    assert isinstance(divisive, bool)
+    assert contrast or divisive
 
     inh, inw, ind = arr_in.shape
 
     nbh, nbw = neighborhood
-    nb_size = nbh * nbw * ind
+    assert nbh <= inh
+    assert nbw <= inw
+
+    nb_size = 1. * nbh * nbw * ind
 
     if arr_out is not None:
         assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
@@ -39,25 +55,54 @@ def lcdnorm3(arr_in, neighborhood, threshold=DEFAULT_THRESHOLD,
     xs = nbw / 2
     _arr_out = arr_in[ys:-ys, xs:-xs]
 
-    # -- local sums
-    arr_sum = arr_in.sum(-1)
-    arr_sum = view_as_windows(arr_sum, (1, nbw)).sum(-1)[:, ::stride, 0]
-    arr_sum = view_as_windows(arr_sum, (nbh, 1)).sum(-2)[::stride, :]
+    # -- Contrast Normalization
+    if contrast:
 
-    # -- local sums of squares
-    arr_ssq = (arr_in ** 2.0).sum(-1)
-    arr_ssq = view_as_windows(arr_ssq, (1, nbw)).sum(-1)[:, ::stride, 0]
-    arr_ssq = view_as_windows(arr_ssq, (nbh, 1)).sum(-2)[::stride, :]
+        # -- local sums
+        arr_sum = arr_in.sum(-1)
+        arr_sum = view_as_windows(arr_sum, (1, nbw)).sum(-1)[:, ::stride, 0]
+        arr_sum = view_as_windows(arr_sum, (nbh, 1)).sum(-2)[::stride, :]
 
-    # -- remove the mean
-    _arr_out = _arr_out - arr_sum / nb_size
+        # -- remove the mean
+        _arr_out = _arr_out - arr_sum / nb_size
 
-    # -- divide by the euclidean norm
-    l2norms = (arr_ssq - (arr_sum ** 2.) / nb_size).clip(0, np.inf)
-    l2norms = np.sqrt(l2norms) + EPSILON
-    # XXX: use numpy-1.7.0 copyto()
-    np.putmask(l2norms, l2norms < threshold, 1)
-    _arr_out = _arr_out / l2norms
+    # -- Divisive (gain) Normalization
+    if divisive:
+
+        # -- local sums of squares
+        arr_ssq = (arr_in ** 2.0).sum(-1)
+        arr_ssq = view_as_windows(arr_ssq, (1, nbw)).sum(-1)[:, ::stride, 0]
+        arr_ssq = view_as_windows(arr_ssq, (nbh, 1)).sum(-2)[::stride, :]
+
+        # -- divide by the euclidean norm
+        if contrast:
+            l2norms = (arr_ssq - (arr_sum ** 2.0) / nb_size)
+        else:
+            l2norms = arr_ssq
+
+        #l2norms = l2norms.clip(0, np.inf)
+        #val = l2norms.copy()
+        np.putmask(l2norms, l2norms < 0., 0.)
+        l2norms = np.sqrt(l2norms) + EPSILON
+        #l2norms = np.sqrt(l2norms)
+
+        if stretch != 1:
+            _arr_out *= stretch
+            l2norms *= stretch
+
+        # XXX: use numpy-1.7.0 copyto()
+        #np.putmask(l2norms, l2norms < (threshold + stretch * EPSILON), 1.0)
+        np.putmask(l2norms, l2norms < (threshold + EPSILON), 1.0)
+        #np.putmask(l2norms, l2norms < threshold, 1.0)
+
+        #print 'XXX', l2norms.mean()
+
+        #import IPython; ipshell = IPython.embed; ipshell(banner1='ipshell')
+
+        # -- avoid zero division
+        #np.putmask(l2norms, l2norms < EPSILON, EPSILON)
+
+        _arr_out = _arr_out / l2norms
 
     if arr_out is not None:
         arr_out[:] = _arr_out
@@ -70,42 +115,3 @@ try:
     lcdnorm3 = profile(lcdnorm3)
 except NameError:
     pass
-
-
-def ldnorm3(arr_in, neighborhood, threshold=DEFAULT_THRESHOLD,
-            stride=DEFAULT_STRIDE, arr_out=None):
-    """3D Local Divisive Normalization
-
-    XXX: docstring
-    """
-
-    assert arr_in.ndim == 3
-    assert len(neighborhood) == 2
-
-    inh, inw, ind = arr_in.shape
-
-    nbh, nbw = neighborhood
-
-    if arr_out is not None:
-        assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
-
-    # -- prepare arr_out
-    ys = nbh / 2
-    xs = nbw / 2
-    _arr_out = arr_in[ys:-ys, xs:-xs]
-
-    # -- divide by the euclidean norm
-    arr_ssq = (arr_in ** 2.0).sum(-1)
-    arr_ssq = view_as_windows(arr_ssq, (1, nbw)).sum(-1)[:, ::stride, 0]
-    arr_ssq = view_as_windows(arr_ssq, (nbh, 1)).sum(-2)[::stride, :]
-    l2norms = np.sqrt(arr_ssq) + EPSILON
-    # XXX: use numpy-1.7.0 copyto()
-    np.putmask(l2norms, l2norms < threshold, 1)
-    _arr_out = _arr_out / l2norms
-
-    if arr_out is not None:
-        arr_out[:] = _arr_out
-    else:
-        arr_out = _arr_out
-
-    return arr_out
