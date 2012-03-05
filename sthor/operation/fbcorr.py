@@ -8,6 +8,7 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     """3D Filterbank Correlation
     XXX: docstring
     """
+    assert arr_in.dtype == np.float32
 
     assert arr_in.ndim == 3
     assert arr_fb.ndim == 4
@@ -32,6 +33,7 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     arr_out = np.dot(arr_inrm, arr_fbm)
     arr_out = arr_out.reshape(outh, outw, -1)
 
+    assert arr_out.dtype == np.float32
     return arr_out
 
 
