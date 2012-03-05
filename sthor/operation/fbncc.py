@@ -60,7 +60,8 @@ def fbncc3(arr_in, arr_fb,
     # Implementing the following:
     inr_sum = np.apply_over_axes(np.sum, arr_inr, (5, 4, 3))
     # using numexpr:
-    #inr_sum = ne.evaluate('sum(arr_inr, 5)')
+    #inr_sum = arr_inr
+    #inr_sum = ne.evaluate('sum(inr_sum, 5)')
     #inr_sum = ne.evaluate('sum(inr_sum, 4)')
     #inr_sum = ne.evaluate('sum(inr_sum, 3)')[:, :, :, np.newaxis, np.newaxis, np.newaxis]
 
@@ -130,7 +131,7 @@ def main():
         np.random.randn(9, 9, 256, 256).astype('f'), 
     ]
 
-    N = 10
+    N = 2
     import time
     start = time.time()
     for i in xrange(N):
