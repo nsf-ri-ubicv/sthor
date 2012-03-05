@@ -32,6 +32,7 @@ def lcdnorm3(arr_in, neighborhood,
 
     XXX: docstring
     """
+    assert arr_in.dtype == np.float32
 
     assert arr_in.ndim == 3
     assert len(neighborhood) == 2
@@ -49,6 +50,7 @@ def lcdnorm3(arr_in, neighborhood,
 
     if arr_out is not None:
         assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
+        assert arr_out.dtype == arr_in.dtype
 
     # -- prepare arr_out
     ys = nbh / 2
@@ -109,6 +111,7 @@ def lcdnorm3(arr_in, neighborhood,
     else:
         arr_out = _arr_out
 
+    assert arr_out.dtype == np.float32
     return arr_out
 
 try:

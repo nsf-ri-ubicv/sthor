@@ -6,21 +6,13 @@
 # License: BSD
 
 import numpy as np
+import numexpr as ne
 
 from sthor.operation import lcdnorm3
 from sthor.operation import fbcorr
 from sthor.operation import lpool3
 
-from pythor3.operation import fbcorr as pt3fbcorr
-from pythor3.operation import lpool as pt3lpool
-from pythor3.operation import lnorm as pt3lnorm
-
-nfs = [64, 128, 256]
-nb = (9, 9)
-
-
 from pprint import pprint
-from pythor3 import plugin_library
 
 
 class SequentialLayeredModel(object):
@@ -61,8 +53,6 @@ class SequentialLayeredModel(object):
 
             for op_idx, (op_name, op_params) in enumerate(layer_desc):
 
-                #print op_name
-                #print op_params
                 tmp_in = tmp_out
 
                 kwargs = op_params['kwargs']
@@ -115,7 +105,7 @@ class SequentialLayeredModel(object):
                             filt /= filt_norm
                             fb[fidx] = filt
 
-                        fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4))
+                        fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype('f')
 
                         filterbanks[fbkey] = fb
                         print fb.shape
@@ -123,12 +113,20 @@ class SequentialLayeredModel(object):
                     fb = filterbanks[fbkey]
 
                     # -- filter
+                    assert tmp_in.dtype == np.float32
                     tmp_out = fbcorr(tmp_in, fb)
 
                     # -- activation
                     min_out = -np.inf if min_out is None else min_out
                     max_out = +np.inf if max_out is None else max_out
-                    tmp_out = tmp_out.clip(min_out, max_out)
+                    # insure that the type is right before calling numexpr
+                    min_out = np.array([min_out], dtype=tmp_in.dtype)
+                    max_out = np.array([max_out], dtype=tmp_in.dtype)
+                    # call numexpr
+                    tmp_out = ne.evaluate('where(tmp_out < min_out, min_out, tmp_out)')
+                    tmp_out = ne.evaluate('where(tmp_out > max_out, max_out, tmp_out)')
+                    assert tmp_out.dtype == tmp_in.dtype
+
 
                 elif op_name == 'lpool':
 
@@ -141,7 +139,8 @@ class SequentialLayeredModel(object):
                 else:
                     raise ValueError("operation '%s' not understood" % op_name)
 
-                #print tmp_out.shape
+                assert tmp_out.dtype == tmp_in.dtype
+                assert tmp_out.dtype == np.float32
 
         return tmp_out
 
@@ -174,189 +173,57 @@ def main():
         desc = gen.next()
         genson.default_random_seed = 1
 
-
-        #desc = \
-                #[[('lnorm',
-   #{'kwargs': {'inker_shape': (7, 7),
-               #'outker_shape': (7, 7),
-               #'remove_mean': True,
-               #'stretch': 1,
-               #'threshold': 0.10000000000000001}})],
- #[('fbcorr',
-   #{'initialize': {'filter_shape': (7, 7),
-                   #'generate': ('random:uniform', {'rseed': 42}),
-                   #'n_filters': 64},
-    #'kwargs': {'max_out': 1, 'min_out': 0}}),
-  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 2, 'stride': 2}}),
-  #('lnorm',
-   #{'kwargs': {'inker_shape': (7, 7),
-               #'outker_shape': (7, 7),
-               #'remove_mean': True,
-               #'stretch': 0.10000000000000001,
-               #'threshold': 10}})],
- #[('fbcorr',
-   #{'initialize': {'filter_shape': (9, 9),
-                   #'generate': ('random:uniform', {'rseed': 42}),
-                   #'n_filters': 32},
-    #'kwargs': {'max_out': 1, 'min_out': 0}}),
-  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 1, 'stride': 2}}),
-  #('lnorm',
-   #{'kwargs': {'inker_shape': (9, 9),
-               #'outker_shape': (9, 9),
-               #'remove_mean': False,
-               #'stretch': 0.10000000000000001,
-               #'threshold': 0.10000000000000001}})],
- #[('fbcorr',
-   #{'initialize': {'filter_shape': (3, 3),
-                   #'generate': ('random:uniform', {'rseed': 42}),
-                   #'n_filters': 256},
-    #'kwargs': {'max_out': 1, 'min_out': 0}}),
-  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 10, 'stride': 2}}),
-  #('lnorm',
-   #{'kwargs': {'inker_shape': (3, 3),
-               #'outker_shape': (3, 3),
-               #'remove_mean': False,
-               #'stretch': 10,
-               #'threshold': 10}})]
-#]
-
-
-        #desc = \
-                #[[('lnorm',
-   #{'kwargs': {'inker_shape': (7, 7),
-               #'outker_shape': (7, 7),
-               #'remove_mean': True,
-               #'stretch': 1,
-               #'threshold': 0.10000000000000001}})],
- #[('fbcorr',
-   #{'initialize': {'filter_shape': (3, 3),
-                   #'generate': ('random:uniform', {'rseed': 42}),
-                   #'n_filters': 32},
-    #'kwargs': {'max_out': None, 'min_out': None}}),
-  #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 10, 'stride': 2}}),
-  #('lnorm',
-   #{'kwargs': {'inker_shape': (3, 3),
-               #'outker_shape': (3, 3),
-               #'remove_mean': True,
-               #'stretch': 1,
-               #'threshold': 10}})],
- #[('fbcorr',
-   #{'initialize': {'filter_shape': (9, 9),
-                   #'generate': ('random:uniform', {'rseed': 42}),
-                   #'n_filters': 32},
-    #'kwargs': {'max_out': 1, 'min_out': None}}),
-  #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
-  #('lnorm',
-   #{'kwargs': {'inker_shape': (9, 9),
-               #'outker_shape': (9, 9),
-               #'remove_mean': False,
-               #'stretch': 1,
-               #'threshold': 0.10000000000000001}})],
- #[('fbcorr',
-   #{'initialize': {'filter_shape': (9, 9),
-                   #'generate': ('random:uniform', {'rseed': 42}),
-                   #'n_filters': 256},
-    #'kwargs': {'max_out': 1, 'min_out': 0}}),
-  #('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 2, 'stride': 2}}),
-  #('lnorm',
-   #{'kwargs': {'inker_shape': (9, 9),
-               #'outker_shape': (9, 9),
-               #'remove_mean': True,
-               #'stretch': 1,
-               #'threshold': 1}})]]
-
-        #desc = \
-                #[[('lnorm',
-                   #{'kwargs': {'inker_shape': (7, 7),
-                               #'outker_shape': (7, 7),
-                               ##'remove_mean': False,
-                               #'remove_mean': True,
-                               #'stretch': 10,
-                               #'threshold': 10}})],
-                 ###[('fbcorr',
-                   ###{'initialize': {'filter_shape': (5, 5),
-                                   ###'generate': ('random:uniform', {'rseed': 42}),
-                                   ##'n_filters': 16},
-                    ##'kwargs': {'max_out': None, 'min_out': 0}}),
-                  ##('lpool', {'kwargs': {'ker_shape': (9, 9), 'order': 10, 'stride': 2}}),
-                  ##('lnorm',
-                   ##{'kwargs': {'inker_shape': (9, 9),
-                               ##'outker_shape': (9, 9),
-                               ##'remove_mean': True,
-                               ##'stretch': 10,
-                               ##'threshold': 0.10000000000000001}})],
-                 ##[('fbcorr',
-                   ##{'initialize': {'filter_shape': (3, 3),
-                                   ##'generate': ('random:uniform', {'rseed': 42}),
-                                   ##'n_filters': 16},
-                    ##'kwargs': {'max_out': 1, 'min_out': 0}}),
-                  ##('lpool', {'kwargs': {'ker_shape': (7, 7), 'order': 2, 'stride': 2}}),
-                  ##('lnorm',
-                   ##{'kwargs': {'inker_shape': (7, 7),
-                               ##'outker_shape': (7, 7),
-                               ##'remove_mean': False,
-                               ##'stretch': 1,
-                               ##'threshold': 10}})],
-                 ##[('fbcorr',
-                   ##{'initialize': {'filter_shape': (5, 5),
-                                   ##'generate': ('random:uniform', {'rseed': 42}),
-                                   ##'n_filters': 32},
-                    ##'kwargs': {'max_out': 1, 'min_out': 0}}),
-                  ##('lpool', {'kwargs': {'ker_shape': (3, 3), 'order': 2, 'stride': 2}}),
-                  ##('lnorm',
-                   ##{'kwargs': {'inker_shape': (5, 5),
-                               ##'outker_shape': (5, 5),
-                               ##'remove_mean': True,
-                               ##'stretch': 10,
-                               ##'threshold': 1}})]
-                #]
-
-    #desc = \
-    #[[('lnorm',
-       #{'kwargs': {'inker_shape': (5, 5),
-                   #'outker_shape': (5, 5),
-                   #'remove_mean': True,
-                   #'stretch': 1,
-                   #'threshold': 0.1}})],
-     #[('fbcorr',
-       #{'initialize': {'filter_shape': (7, 7),
-                       #'generate': ('random:uniform', {'rseed': 42}),
-                       #'n_filters': 64},
-        #'kwargs': {'max_out': None, 'min_out': None}}),
-      #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 1, 'stride': 2}}),
-      #('lnorm',
-       #{'kwargs': {'inker_shape': (5, 5),
-                   #'outker_shape': (5, 5),
-                   #'remove_mean': False,
-                   #'stretch': 0.1,
-                   #'threshold': 0.1}})
-     #],
-     #[('fbcorr',
-       #{'initialize': {'filter_shape': (5, 5),
-                       #'generate': ('random:uniform', {'rseed': 42}),
-                       #'n_filters': 64},
-        #'kwargs': {'max_out': None, 'min_out': None}}),
-      #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
-      #('lnorm',
-       #{'kwargs': {'inker_shape': (3, 3),
-                   #'outker_shape': (3, 3),
-                   #'remove_mean': True,
-                   #'stretch': 10,
-                   #'threshold': 0.1}})
-     #],
-     #[('fbcorr',
-       #{'initialize': {'filter_shape': (9, 9),
-                       #'generate': ('random:uniform', {'rseed': 42}),
-                       #'n_filters': 16},
-        #'kwargs': {'max_out': 1, 'min_out': None}}),
-      #('lpool', {'kwargs': {'ker_shape': (5, 5), 'order': 2, 'stride': 2}}),
-      #('lnorm',
-       #{'kwargs': {'inker_shape': (3, 3),
-                   #'outker_shape': (3, 3),
-                   #'remove_mean': True,
-                   #'stretch': 1,
-                   #'threshold': 1}})]
-    #]
+        ## -- L3 1st
+        #desc = [
+            #[('lnorm',
+              #{'kwargs': {'inker_shape': [9, 9],
+                          #'outker_shape': [9, 9],
+                          #'remove_mean': False,
+                          #'stretch': 10,
+                          #'threshold': 1}})],
+            #[('fbcorr',
+              ##{'initialize': ['426b269c1bfeec366992218fb6e0cb5252cd7f69',
+                              ##(64, 3, 3)],
+              #{'initialize': {'filter_shape': (3, 3),
+                              #'generate': ('random:uniform', {'rseed': 42}),
+                              #'n_filters': 64},
+               #'kwargs': {'max_out': None, 'min_out': 0}}),
+             #('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 1, 'stride': 2}}),
+             #('lnorm',
+              #{'kwargs': {'inker_shape': [5, 5],
+                          #'outker_shape': [5, 5],
+                          #'remove_mean': False,
+                          #'stretch': 0.10000000000000001,
+                          #'threshold': 1}})],
+            #[('fbcorr',
+              ##{'initialize': ['9f1a2ad385682d076a7feacd923e50c330df4e29',
+                              ##(128, 5, 5, 64)],
+              #{'initialize': {'filter_shape': (5, 5),
+                              #'generate': ('random:uniform', {'rseed': 42}),
+                              #'n_filters': 128},
+               #'kwargs': {'max_out': None, 'min_out': 0}}),
+             #('lpool', {'kwargs': {'ker_shape': [5, 5], 'order': 1, 'stride': 2}}),
+             #('lnorm',
+              #{'kwargs': {'inker_shape': [7, 7],
+                          #'outker_shape': [7, 7],
+                          #'remove_mean': False,
+                          #'stretch': 1,
+                          #'threshold': 1}})],
+            #[('fbcorr',
+              ##{'initialize': ['d79b5af0732b177b2a9170288ba8f73727b56354',
+                              ##(256, 5, 5, 128)],
+              #{'initialize': {'filter_shape': (5, 5),
+                              #'generate': ('random:uniform', {'rseed': 42}),
+                              #'n_filters': 256},
+               #'kwargs': {'max_out': None, 'min_out': 0}}),
+             #('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}}),
+             #('lnorm',
+              #{'kwargs': {'inker_shape': [3, 3],
+                          #'outker_shape': [3, 3],
+                          #'remove_mean': False,
+                          #'stretch': 10,
+                          #'threshold': 1}})]
+        #]
 
         in_shape = 200, 200, 1
 
@@ -386,12 +253,20 @@ def main():
         #slm_gt = TheanoSLM((200, 200, 1), desc)
         #slm_gv = TheanoSLM((200, 200, 1), desc)
 
-        from scipy import misc
-        a = misc.lena()
-        a = misc.imresize(a, (200, 200)) / 1.0
-        a.shape = a.shape[:2] + (1,)
+        #from scipy import misc
+        #a = misc.lena()
+        #a = misc.imresize(a, (200, 200)) / 1.0
+        #a.shape = a.shape[:2] + (1,)
+        #a -= a.min()
+        #a /= a.max()
+        #a = a.astype('f')
+
+        #print a.dtype
+        #raise
+        a = np.random.randn(200, 200, 1).astype('f')
         a -= a.min()
         a /= a.max()
+        a = a.astype('f')
 
         import time
         W = 2
@@ -401,25 +276,26 @@ def main():
 
         N = 10
         for i in xrange(N):
-            #iter += 1
-            #print 'iter', iter
-            #np.random.seed(iter)
+            iter += 1
+            print 'iter', iter
+            np.random.seed(iter)
             #np.random.seed(20)
-            #a = np.random.randn(200, 200, 1).astype('f')
-            #a -= a.min()
-            #a /= a.max()
+            a = np.random.randn(200, 200, 1).astype('f')
+            a -= a.min()
+            a /= a.max()
+            a = a.astype('f')
 
             #print 'a.mean()', a.mean()
             #print 'np.linalg.norm(a)', np.linalg.norm(a)
 
-            a = a.copy()
+            x = a.copy()
             start = time.time()
-            gt = slm_gt.process(a)
+            gt = slm_gt.process(x)
             gt_time += time.time() - start
 
-            a = a.copy()
+            x = a.copy()
             start = time.time()
-            gv = slm_gv.process(a)
+            gv = slm_gv.process(x)
             gv_time += time.time() - start
 
             print 'norm', np.linalg.norm(gv - gt)
