@@ -127,8 +127,8 @@ def main():
         np.random.randn(9, 9, 64, 128).astype('f'),
         np.random.randn(9, 9, 128, 128).astype('f'),
         # -- layer 3
-        np.random.randn(9, 9, 128, 256).astype('f'), 
-        np.random.randn(9, 9, 256, 256).astype('f'), 
+        np.random.randn(9, 9, 128, 256).astype('f'),
+        np.random.randn(9, 9, 256, 256).astype('f'),
     ]
 
     N = 2
