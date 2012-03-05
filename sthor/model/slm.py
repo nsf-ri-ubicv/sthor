@@ -80,32 +80,36 @@ class SequentialLayeredModel(object):
                     fbkey = layer_idx, op_idx
                     if fbkey not in self.filterbanks:
                         initialize = op_params['initialize']
-                        filter_shape = initialize['filter_shape']
-                        generate = initialize['generate']
-                        n_filters = initialize['n_filters']
+                        if type(initialize) == np.ndarray:
+                            fb = initialize
+                            if len(fb.shape) == 3:
+                                fb = fb[..., np.newaxis]
+                        else:
+                            filter_shape = initialize['filter_shape']
+                            generate = initialize['generate']
+                            n_filters = initialize['n_filters']
 
-                        fb_shape = (n_filters,) + filter_shape + (tmp_in.shape[-1],)
+                            fb_shape = (n_filters,) + filter_shape + (tmp_in.shape[-1],)
 
-                        # generate filterbank data
-                        method_name, method_kwargs = generate
-                        assert method_name == 'random:uniform'
+                            # generate filterbank data
+                            method_name, method_kwargs = generate
+                            assert method_name == 'random:uniform'
 
-                        rseed = method_kwargs.get('rseed', None)
-                        rng = np.random.RandomState(rseed)
+                            rseed = method_kwargs.get('rseed', None)
+                            rng = np.random.RandomState(rseed)
 
-                        fb = rng.uniform(size=fb_shape)
+                            fb = rng.uniform(size=fb_shape)
 
-                        for fidx in xrange(n_filters):
-                            filt = fb[fidx]
-                            # zero-mean, unit-l2norm
-                            filt -= filt.mean()
-                            filt_norm = np.linalg.norm(filt)
-                            assert filt_norm != 0
-                            filt /= filt_norm
-                            fb[fidx] = filt
+                            for fidx in xrange(n_filters):
+                                filt = fb[fidx]
+                                # zero-mean, unit-l2norm
+                                filt -= filt.mean()
+                                filt_norm = np.linalg.norm(filt)
+                                assert filt_norm != 0
+                                filt /= filt_norm
+                                fb[fidx] = filt
 
                         fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype('f')
-
                         self.filterbanks[fbkey] = fb
                         print fb.shape
 
