@@ -153,7 +153,6 @@ def main():
     from pythor3.utils.testing import assert_allclose_round
     from thoreano.slm import TheanoSLM
 
-
     mypath = path.dirname(__file__)
 
     RTOL = 1e-2
