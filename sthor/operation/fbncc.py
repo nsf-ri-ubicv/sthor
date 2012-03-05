@@ -10,17 +10,18 @@ __all__ = ['fbncc3']
 import numpy as np
 from skimage.util.shape import view_as_windows
 
+import numexpr as ne
+if not ne.use_vml:
+    import warnings
+    warnings.warn("numexpr is NOT using Intel VML!")
+
+# --
 DEFAULT_STRIDE = 1
 DEFAULT_THRESHOLD = 1.0
 DEFAULT_NORMALIZE_FILTERS = True
 
 EPSILON = 1e-6
 
-
-import numexpr as ne
-assert ne.use_vml
-
-print ne.set_num_threads(8)
 
 def fbncc3(arr_in, arr_fb,
            normalize_filters=DEFAULT_NORMALIZE_FILTERS,
