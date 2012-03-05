@@ -10,7 +10,7 @@ from numpy.testing import assert_allclose
 
 import numpy as np
 
-from sthor.operation import fbcorr
+from sthor.operation import fbcorr3
 
 # -- Raise exceptions on floating-point errors
 np.seterr(all='raise')
@@ -60,7 +60,7 @@ def test_constant_arr_in_and_fb():
 
     ref = constant * np.ones(outh*outw*outd).reshape(
                             (outh, outw, outd)).astype(DTYPE)
-    res = fbcorr(arr_in, arr_fb)
+    res = fbcorr3(arr_in, arr_fb)
     assert_allclose(res, ref, rtol=RTOL, atol=ATOL)
 
 
@@ -87,7 +87,7 @@ def test_constant_arr_in_arange_fb():
     for k in xrange(outd):
         ref[:, :, k] = alpha * (k + beta)
 
-    res = fbcorr(arr_in, arr_fb)
+    res = fbcorr3(arr_in, arr_fb)
     assert_allclose(res, ref, rtol=RTOL, atol=ATOL)
 
 
@@ -113,7 +113,7 @@ def test_arange_arr_in_constant_fb():
                                   + ind * (2 * j + fbw - 1)
                                   + ind * inw * (2 * i + fbh - 1))
 
-    res = fbcorr(arr_in, arr_fb)
+    res = fbcorr3(arr_in, arr_fb)
     assert_allclose(res, ref, rtol=RTOL, atol=ATOL)
 
 
@@ -149,7 +149,7 @@ def test_arange_arr_in_and_fb():
                           (0.5 * fbw * (fbh - 1) + 0.5 * ind * (fbw - 1) \
                         +  1. / 3. * (2 * ind - 1)) + (ind - 1) * k)
 
-    res = fbcorr(arr_in, arr_fb)
+    res = fbcorr3(arr_in, arr_fb)
     assert_allclose(res, ref, rtol=RTOL, atol=ATOL)
 
 
@@ -172,7 +172,7 @@ def test_constant_arr_in_random_arr_fb():
         constant = a * arr_fb[..., k].sum()
         ref[..., k] = constant
 
-    res = fbcorr(arr_in, arr_fb)
+    res = fbcorr3(arr_in, arr_fb)
     assert_allclose(res, ref, rtol=RTOL, atol=ATOL)
 
 
@@ -195,7 +195,7 @@ def test_random_arr_in_and_arr_fb():
                 ref[i, j, k] = get_fbcorr_element(arr_in, arr_fb,
                                                   i, j, k)
 
-    res = fbcorr(arr_in, arr_fb)
+    res = fbcorr3(arr_in, arr_fb)
     assert_allclose(res, ref, rtol=RTOL, atol=ATOL)
 
 
@@ -215,10 +215,10 @@ def test_input_d_1():
                     [  0.,   4.,   8.,  12.],
                     [  0.,   5.,  10.,  15.]]], dtype=DTYPE)
 
-    arr_out = fbcorr(arr_in, arr_fb)
+    arr_out = fbcorr3(arr_in, arr_fb)
     assert_allclose(arr_out, gt, rtol=RTOL, atol=ATOL)
 
-    arr_out = fbcorr(arr_in, arr_fb)
+    arr_out = fbcorr3(arr_in, arr_fb)
     assert_allclose(arr_out, gt, rtol=RTOL, atol=ATOL)
 
 
@@ -234,10 +234,10 @@ def test_one_dot():
                        121800., 122430., 123060., 123690.]]],
                   dtype=DTYPE)
 
-    arr_out = fbcorr(arr_in, arr_fb)
+    arr_out = fbcorr3(arr_in, arr_fb)
     assert_allclose(arr_out, gt, rtol=RTOL, atol=ATOL)
 
-    arr_out = fbcorr(arr_in, arr_fb)
+    arr_out = fbcorr3(arr_in, arr_fb)
     assert_allclose(arr_out, gt, rtol=RTOL, atol=ATOL)
 
 
@@ -258,7 +258,7 @@ def test_arr_out_2d():
             gt[i, k] = get_fbcorr_element(arr_in, arr_fb,
                                           idx[0][i], idx[1][i], k)
 
-    arr_out = fbcorr(arr_in, arr_fb)
+    arr_out = fbcorr3(arr_in, arr_fb)
     gv = arr_out[idx]
     assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
 
@@ -280,7 +280,7 @@ def test_arr_out_3d():
             gt[i, k] = get_fbcorr_element(arr_in, arr_fb,
                                           idx[0][i], idx[1][i], k)
 
-    arr_out = fbcorr(arr_in, arr_fb)
+    arr_out = fbcorr3(arr_in, arr_fb)
     gv = arr_out[idx]
     assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
 
@@ -292,40 +292,40 @@ def test_arr_out_3d():
 def test_error_arr_in_ndim():
     arr_in = np.zeros((1, 4, 4, 4), dtype=DTYPE)
     arr_fb = np.zeros((1, 1, 4, 8), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)
 
 @raises(AssertionError)
 def test_error_arr_fb_ndim():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((3, 3, 4), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)
 
 @raises(AssertionError)
 def test_error_too_few_filters():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((3, 3, 4, 1), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)
 
 @raises(AssertionError)
 def test_error_arr_fb_h_too_big():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((21, 1, 4, 8), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)
 
 @raises(AssertionError)
 def test_error_arr_fb_w_too_big():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((1, 31, 4, 8), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)
 
 @raises(AssertionError)
 def test_error_arr_fb_d_too_small():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((1, 1, 1, 8), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)
 
 @raises(AssertionError)
 def test_error_arr_fb_d_too_large():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((1, 1, 5, 8), dtype=DTYPE)
-    fbcorr(arr_in, arr_fb)
+    fbcorr3(arr_in, arr_fb)

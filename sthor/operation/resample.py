@@ -1,6 +1,8 @@
 # Authors: Nicolas Poilvert <poilvert@rowland.harvard.edu>
 #          Nicolas Pinto <pinto@alum.mit.edu>
-# License: BSD 3-clause
+# License: BSD
+
+__all__ = ['resample']
 
 import numpy as np
 from scipy import ndimage as ndi

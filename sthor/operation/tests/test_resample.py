@@ -3,7 +3,7 @@ from numpy.testing import assert_almost_equal as almost
 
 import numpy as np
 
-from skimage.shape import resample
+from sthor.operation import resample
 
 
 @raises(AssertionError)
