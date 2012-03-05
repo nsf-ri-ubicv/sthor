@@ -80,7 +80,7 @@ class SequentialLayeredModel(object):
                     fbkey = layer_idx, op_idx
                     if fbkey not in self.filterbanks:
                         initialize = op_params['initialize']
-                        if type(initialize) == np.ndarray:
+                        if isinstance(initialize, np.ndarray):
                             fb = initialize
                             if len(fb.shape) == 3:
                                 fb = fb[..., np.newaxis]
