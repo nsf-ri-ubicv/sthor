@@ -9,7 +9,7 @@ import numpy as np
 import numexpr as ne
 
 from sthor.operation import lcdnorm3
-from sthor.operation import fbcorr
+from sthor.operation import fbcorr3
 from sthor.operation import lpool3
 
 from pprint import pprint
@@ -117,7 +117,7 @@ class SequentialLayeredModel(object):
 
                     # -- filter
                     assert tmp_in.dtype == np.float32
-                    tmp_out = fbcorr(tmp_in, fb)
+                    tmp_out = fbcorr3(tmp_in, fb)
 
                     # -- activation
                     min_out = -np.inf if min_out is None else min_out
