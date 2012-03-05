@@ -8,7 +8,7 @@
 
 from nose.tools import assert_equals
 from numpy.testing import assert_array_equal
-from pythor3.utils.testing import assert_allclose_round
+from sthor.util.testing import assert_allclose_round
 import numpy as np
 
 from scipy.misc import lena
