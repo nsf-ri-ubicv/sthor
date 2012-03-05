@@ -149,8 +149,9 @@ def main():
     import genson
     from os import path
     from numpy.testing import assert_allclose
-    from pythor3.utils.testing import assert_allclose_round
-    from thoreano.slm import TheanoSLM
+    from sthor.util.testing import assert_allclose_round
+    #from pythor3.utils.testing import assert_allclose_round
+    #from thoreano.slm import TheanoSLM
 
     mypath = path.dirname(__file__)
 
