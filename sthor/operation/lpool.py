@@ -40,7 +40,7 @@ def lpool3(arr_in, neighborhood,
 
     if arr_out is not None:
         assert arr_out.dtype == arr_in.dtype
-        # XXX: more tests on the shape of arr_out
+        assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
 
     _arr_out = ne.evaluate('arr_in ** order')
     _arr_out = view_as_windows(_arr_out, (1, nbw, 1))
