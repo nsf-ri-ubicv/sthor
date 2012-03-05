@@ -14,6 +14,8 @@ from sthor.operation import lpool3
 
 from pprint import pprint
 
+DTYPE = np.float16
+
 
 class SequentialLayeredModel(object):
 
@@ -109,7 +111,7 @@ class SequentialLayeredModel(object):
                                 filt /= filt_norm
                                 fb[fidx] = filt
 
-                        fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype('f')
+                        fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
                         self.filterbanks[fbkey] = fb
                         print fb.shape
 
@@ -275,7 +277,7 @@ def main():
         W = 2
         for i in xrange(W):
             slm_gt.process(a)
-            slm_gv.process(a)
+            slm_gv.process(a.astype(DTYPE))
 
         N = 10
         for i in xrange(N):
@@ -298,7 +300,7 @@ def main():
 
             x = a.copy()
             start = time.time()
-            gv = slm_gv.process(x)
+            gv = slm_gv.process(x.astype(DTYPE))
             gv_time += time.time() - start
 
             print 'norm', np.linalg.norm(gv - gt)

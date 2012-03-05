@@ -56,8 +56,16 @@ def fbncc3(arr_in, arr_fb,
 
     # -- Normalize input array
     arr_inr = view_as_windows(arr_in, arr_fb.shape[:-1])[::stride, ::stride]
-    inr_sum = np.apply_over_axes(np.sum, arr_inr, (3, 4, 5))
-    inr_ssq = np.apply_over_axes(np.sum, ne.evaluate('arr_inr ** 2'), (3, 4, 5))
+
+    # Implementing the following:
+    inr_sum = np.apply_over_axes(np.sum, arr_inr, (5, 4, 3))
+    # using numexpr:
+    #inr_sum = ne.evaluate('sum(arr_inr, 5)')
+    #inr_sum = ne.evaluate('sum(inr_sum, 4)')
+    #inr_sum = ne.evaluate('sum(inr_sum, 3)')[:, :, :, np.newaxis, np.newaxis, np.newaxis]
+
+    #inr_ssq = np.apply_over_axes(np.sum, ne.evaluate('arr_inr ** 2'), (3, 4, 5))
+    inr_ssq = np.apply_over_axes(np.sum, ne.evaluate('arr_inr ** 2'), (5, 4, 3))
 
     #inr_num = arr_inr - inr_sum / nb_size
     inr_num = ne.evaluate('arr_inr - inr_sum / nb_size')
@@ -107,18 +115,19 @@ except NameError:
 
 
 def main():
-    arr = np.random.randn(32, 32, 3).astype('f')
+    #arr = np.random.randn(320, 320, 3).astype('f')
+    arr = np.random.randn(100, 100, 3).astype('f')
 
     fbl = [
         # -- layer 1
-        np.random.randn(5, 5, 3, 64).astype('f'),
-        np.random.randn(5, 5, 64, 64).astype('f'),
+        np.random.randn(9, 9, 3, 64).astype('f'),
+        np.random.randn(9, 9, 64, 64).astype('f'),
         # -- layer 2
-        np.random.randn(5, 5, 64, 128).astype('f'),
-        np.random.randn(5, 5, 128, 128).astype('f'),
+        np.random.randn(9, 9, 64, 128).astype('f'),
+        np.random.randn(9, 9, 128, 128).astype('f'),
         # -- layer 3
-        np.random.randn(5, 5, 128, 256).astype('f'), 
-        np.random.randn(5, 5, 256, 256).astype('f'), 
+        np.random.randn(9, 9, 128, 256).astype('f'), 
+        np.random.randn(9, 9, 256, 256).astype('f'), 
     ]
 
     N = 10
@@ -128,7 +137,7 @@ def main():
         tmp = arr.copy()
         for fi, fb in enumerate(fbl):
             print tmp.shape, fb.shape
-            tmp = fbncc3(tmp, fb)
+            tmp = fbncc3(tmp, fb, normalize_filters=False)
             #if (fi + 1) % 2 == 0:
                 #tmp = fbncc3(tmp, fb, stride=2)
             #else:
