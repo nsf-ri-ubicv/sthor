@@ -8,7 +8,6 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     """3D Filterbank Correlation
     XXX: docstring
     """
-    assert arr_in.dtype == np.float32
 
     assert arr_in.ndim == 3
     assert arr_fb.ndim == 4
@@ -20,6 +19,10 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     assert fbh <= inh
     assert fbw <= inw
     assert fbd == ind
+
+    if arr_out is not None:
+        assert arr_out.dtype == arr_in.dtype
+        assert arr_out.shape == (inh - fbh + 1, inw - fbw + 1, fbn)
 
     # -- reshape arr_in
     arr_inr = view_as_windows(arr_in, (fbh, fbw, fbd))
@@ -33,7 +36,8 @@ def fbcorr(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     arr_out = np.dot(arr_inrm, arr_fbm)
     arr_out = arr_out.reshape(outh, outw, -1)
 
-    assert arr_out.dtype == np.float32
+    assert arr_out.dtype == arr_in.dtype  # XXX: should go away
+
     return arr_out
 
 

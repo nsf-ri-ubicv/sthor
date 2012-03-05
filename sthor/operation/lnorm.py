@@ -19,9 +19,6 @@ DEFAULT_CONTRAST = True
 DEFAULT_DIVISIVE = True
 
 
-def lsum2(arr_in, neighborhood, stride=DEFAULT_STRIDE):
-    pass
-
 def lcdnorm3(arr_in, neighborhood,
              contrast=DEFAULT_CONTRAST,
              divisive=DEFAULT_DIVISIVE,
@@ -32,7 +29,6 @@ def lcdnorm3(arr_in, neighborhood,
 
     XXX: docstring
     """
-    assert arr_in.dtype == np.float32
 
     assert arr_in.ndim == 3
     assert len(neighborhood) == 2
@@ -49,8 +45,8 @@ def lcdnorm3(arr_in, neighborhood,
     nb_size = 1. * nbh * nbw * ind
 
     if arr_out is not None:
-        assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
         assert arr_out.dtype == arr_in.dtype
+        assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
 
     # -- prepare arr_out
     ys = nbh / 2
@@ -111,7 +107,8 @@ def lcdnorm3(arr_in, neighborhood,
     else:
         arr_out = _arr_out
 
-    assert arr_out.dtype == np.float32
+    assert arr_out.dtype == arr_in.dtype  # XXX: should go away
+
     return arr_out
 
 try:
