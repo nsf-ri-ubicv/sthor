@@ -29,13 +29,10 @@ def lpool3(arr_in, neighborhood,
 
     XXX: docstring
     """
-    assert arr_in.dtype == np.float32
-
     assert arr_in.ndim == 3
     assert len(neighborhood) == 2
 
-
-    order = np.float32(order)
+    order = np.array([order], dtype=arr_in.dtype)
     stride = np.int(stride)
 
     inh, inw, ind = arr_in.shape
@@ -50,10 +47,11 @@ def lpool3(arr_in, neighborhood,
     _arr_out = ne.evaluate('arr_in ** order')
     #_arr_out = np.squeeze(view_as_windows(_arr_out, (1, nbw, 1)).sum(-2))[:, ::stride]
     rv = view_as_windows(_arr_out, (1, nbw, 1))
-    _arr_out = np.squeeze(ne.evaluate('sum(rv, 4)'))[:, ::stride]
+    _arr_out = ne.evaluate('sum(rv, 4)')[:, ::stride, :, 0, 0]
     #_arr_out = np.squeeze(view_as_windows(_arr_out, (nbh, 1, 1)).sum(-3))[::stride, :]
     rv = view_as_windows(_arr_out, (nbh, 1, 1))
-    _arr_out = np.squeeze(ne.evaluate('sum(rv, 3)'))[::stride]
+    #_arr_out = np.squeeze(ne.evaluate('sum(rv, 3)'))[::stride]
+    _arr_out = ne.evaluate('sum(rv, 3)')[::stride, :, :, 0, 0]
     # Note that you need to use '1' and not '1.0' so that the dtype of
     # the exponent does not change (i.e. get promoted)
     _arr_out = ne.evaluate('_arr_out ** (1 / order)')
@@ -63,7 +61,7 @@ def lpool3(arr_in, neighborhood,
     else:
         arr_out = _arr_out
 
-    assert arr_out.dtype == np.float32
+    assert arr_out.dtype == arr_in.dtype
     return arr_out
 
 try:
