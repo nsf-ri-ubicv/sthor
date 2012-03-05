@@ -6,12 +6,12 @@ base_path = os.path.abspath(os.path.dirname(__file__))
 
 def configuration(parent_package='', top_path=None):
     from numpy.distutils.misc_util import Configuration, get_numpy_include_dirs
-    from sthor.util.build import cython
+    from sthor.util import build
 
     config = Configuration('resample', parent_package, top_path)
     config.add_data_dir('tests')
 
-    cython(['_resample.pyx'], working_path=base_path)
+    build.cython(['_resample.pyx'], working_path=base_path)
 
     config.add_extension(
         '_resample',
