@@ -3,7 +3,8 @@ import scipy as sp
 from scipy import misc
 
 #import pyximport; pyximport.install()
-import resample_cython
+#import resample_cython
+from resample import resample
 import pylab as pl
 
 l = misc.lena()[::2, ::2]/1.
@@ -19,9 +20,9 @@ import time
 N = 10
 start = time.time()
 for i in xrange(N):
-    out = np.empty((1024, 1024, l.shape[-1]), dtype='float32')
-    resample_cython.upsample_cython(l, out)
-    print out.shape#
+    #out = np.empty((1024, 1024, l.shape[-1]), dtype='float32')
+    out =resample(l, (1024, 1024, l.shape[-1]))
+    print out.shape
 end = time.time()
 fps = N / (end - start)
 print fps
