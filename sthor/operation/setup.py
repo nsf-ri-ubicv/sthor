@@ -19,10 +19,17 @@ def configuration(parent_package='', top_path=None):
         include_dirs=[get_numpy_include_dirs()],
         extra_compile_args=[
             "-fopenmp",
-            "-O3",
+            "-pthread",
+            "-O6",
             "-march=native",
             "-mtune=native",
             "-funroll-all-loops",
+            "-fomit-frame-pointer",
+            "-march=native",
+            "-mtune=native",
+            "-msse4",
+            "-ftree-vectorize",
+            "-ftree-vectorizer-verbose=5",
         ],
         extra_link_args=['-fopenmp'],
         )

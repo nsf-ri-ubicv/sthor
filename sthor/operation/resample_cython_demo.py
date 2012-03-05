@@ -17,7 +17,7 @@ print l.shape
 #r = resample_cython.upsample_cython(a, (6, 4, 4))
 #print r
 import time
-N = 10
+N = 100
 start = time.time()
 for i in xrange(N):
     #out = np.empty((1024, 1024, l.shape[-1]), dtype='float32')
