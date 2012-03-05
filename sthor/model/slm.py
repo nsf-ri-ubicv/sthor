@@ -36,7 +36,6 @@ class SequentialLayeredModel(object):
         """XXX: docstring for process"""
 
         description = self.description
-        filterbanks = self.filterbanks
 
         assert arr_in.shape == self.in_shape
         input_shape = arr_in.shape
@@ -79,7 +78,7 @@ class SequentialLayeredModel(object):
                     min_out = kwargs['min_out']
 
                     fbkey = layer_idx, op_idx
-                    if fbkey not in filterbanks:
+                    if fbkey not in self.filterbanks:
                         initialize = op_params['initialize']
                         filter_shape = initialize['filter_shape']
                         generate = initialize['generate']
@@ -107,10 +106,10 @@ class SequentialLayeredModel(object):
 
                         fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype('f')
 
-                        filterbanks[fbkey] = fb
+                        self.filterbanks[fbkey] = fb
                         print fb.shape
 
-                    fb = filterbanks[fbkey]
+                    fb = self.filterbanks[fbkey]
 
                     # -- filter
                     assert tmp_in.dtype == np.float32
