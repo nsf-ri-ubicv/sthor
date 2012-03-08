@@ -329,3 +329,9 @@ def test_error_arr_fb_d_too_large():
     arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
     arr_fb = np.zeros((1, 1, 5, 8), dtype=DTYPE)
     fbcorr3(arr_in, arr_fb)
+
+@raises(AssertionError)
+def test_error_arr_fb_wrong_dtype():
+    arr_in = np.zeros((20, 30, 4), dtype=DTYPE)
+    arr_fb = np.zeros((1, 1, 5, 8), dtype='float64')
+    fbcorr3(arr_in, arr_fb)
