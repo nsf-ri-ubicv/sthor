@@ -35,6 +35,7 @@ def fbncc3(arr_in, arr_fb,
     # -- Basic checks
     assert arr_in.ndim == 3
     assert arr_fb.ndim == 4
+    assert arr_fb.dtype == arr_in.dtype
 
     inh, inw, ind = arr_in.shape
     fbh, fbw, fbd, fbn = arr_fb.shape
@@ -57,18 +58,9 @@ def fbncc3(arr_in, arr_fb,
     # -- Normalize input array
     arr_inr = view_as_windows(arr_in, arr_fb.shape[:-1])[::stride, ::stride]
 
-    # Implementing the following:
     inr_sum = np.apply_over_axes(np.sum, arr_inr, (5, 4, 3))
-    # using numexpr:
-    #inr_sum = arr_inr
-    #inr_sum = ne.evaluate('sum(inr_sum, 5)')
-    #inr_sum = ne.evaluate('sum(inr_sum, 4)')
-    #inr_sum = ne.evaluate('sum(inr_sum, 3)')[:, :, :, np.newaxis, np.newaxis, np.newaxis]
-
-    #inr_ssq = np.apply_over_axes(np.sum, ne.evaluate('arr_inr ** 2'), (3, 4, 5))
     inr_ssq = np.apply_over_axes(np.sum, ne.evaluate('arr_inr ** 2'), (5, 4, 3))
 
-    #inr_num = arr_inr - inr_sum / nb_size
     inr_num = ne.evaluate('arr_inr - inr_sum / nb_size')
     in_div = np.sqrt((inr_ssq - (inr_sum ** 2.0) / nb_size).clip(0, np.inf))
     np.putmask(in_div, in_div < threshold, 1.0)

@@ -20,6 +20,7 @@ def fbcorr3(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
 
     assert arr_in.ndim == 3
     assert arr_fb.ndim == 4
+    assert arr_fb.dtype == arr_in.dtype
 
     inh, inw, ind = arr_in.shape
     fbh, fbw, fbd, fbn = arr_fb.shape
