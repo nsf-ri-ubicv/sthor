@@ -14,7 +14,7 @@ from sthor.operation import lpool3
 
 from pprint import pprint
 
-DTYPE = np.float16
+DTYPE = np.float32
 
 
 class SequentialLayeredModel(object):
