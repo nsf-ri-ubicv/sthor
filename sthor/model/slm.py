@@ -87,11 +87,11 @@ class SequentialLayeredModel(object):
                             if len(fb.shape) == 3:
                                 fb = fb[..., np.newaxis]
                         else:
-                            filter_shape = initialize['filter_shape']
+                            filter_shape = list(initialize['filter_shape'])
                             generate = initialize['generate']
                             n_filters = initialize['n_filters']
 
-                            fb_shape = (n_filters,) + filter_shape + (tmp_in.shape[-1],)
+                            fb_shape = [n_filters] + filter_shape + [tmp_in.shape[-1]]
 
                             # generate filterbank data
                             method_name, method_kwargs = generate
