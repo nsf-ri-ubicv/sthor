@@ -9,6 +9,7 @@ __all__ = ['lpool3']
 
 import numpy as np
 from skimage.util.shape import view_as_windows
+from sthor.util.pad import pad
 
 import numexpr as ne
 if not ne.use_vml:
@@ -43,22 +44,7 @@ def lpool3(arr_in, neighborhood,
     # -- if mode == 'same', we pad the tensor with a
     #    constant value along the first two directions
     if mode.lower() == 'same':
-        fh, fw = neighborhood[0], neighborhood[1]
-        if fh % 2 == 0:
-            h_left, h_right = fh / 2, fh / 2 - 1
-        else:
-            h_left, h_right = fh / 2, fh / 2
-        if fw % 2 == 0:
-            w_left, w_right = fw / 2, fw / 2 - 1
-        else:
-            w_left, w_right = fw / 2, fw / 2
-        h_new = h_left + arr_in.shape[0] + h_right
-        w_new = w_left + arr_in.shape[1] + w_right
-        narr_in = pad_val * np.ones((h_new, w_new, arr_in.shape[2]),
-                                    dtype=arr_in.dtype)
-        narr_in[h_left:h_new - h_right,
-                w_left:w_new - w_right, :] = arr_in
-        arr_in = narr_in
+        arr_in = pad(arr_in, neighborhood, pad_val)
 
     inh, inw, ind = arr_in.shape
     nbh, nbw = neighborhood
