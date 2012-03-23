@@ -21,7 +21,7 @@ DEFAULT_ORDER = 1.0
 
 
 def lpool3(arr_in, neighborhood,
-           mode='same',
+           mode='valid',
            pad_val=0.,
            order=DEFAULT_ORDER,
            stride=DEFAULT_STRIDE, arr_out=None):
