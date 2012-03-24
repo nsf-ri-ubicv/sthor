@@ -10,7 +10,7 @@ with open('plos09.gson') as fin:
 
 # -- extract SLM parameter range description
 desc = gen.next()
-genson.default_random_seed = 12
+genson.default_random_seed = 7
 in_shape = 512, 512, 1
 h, w, d = in_shape
 
