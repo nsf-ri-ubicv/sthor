@@ -9,11 +9,17 @@ __all__ = ['fbcorr3']
 
 import numpy as np
 from skimage.util.shape import view_as_windows
+from sthor.util.pad import pad
 
 DEFAULT_STRIDE = 1
 
 
-def fbcorr3(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
+def fbcorr3(arr_in,
+            arr_fb,
+            mode='valid',
+            pad_val=0.,
+            stride=DEFAULT_STRIDE,
+            arr_out=None):
     """3D Filterbank Correlation
     XXX: docstring
     """
@@ -22,8 +28,19 @@ def fbcorr3(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     assert arr_fb.ndim == 4
     assert arr_fb.dtype == arr_in.dtype
 
-    inh, inw, ind = arr_in.shape
     fbh, fbw, fbd, fbn = arr_fb.shape
+
+    # -- mode check
+    supported_modes = ['valid', 'same']
+    if mode.lower() not in supported_modes:
+        raise ValueError('mode "%s" not supported' % mode)
+
+    # -- if mode == 'same', we pad the tensor with a
+    #    constant value along the first two directions
+    if mode.lower() == 'same':
+        arr_in = pad(arr_in, (fbh, fbw), pad_val)
+
+    inh, inw, ind = arr_in.shape
 
     assert fbn > 1
     assert fbh <= inh
