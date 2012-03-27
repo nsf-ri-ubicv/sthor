@@ -25,6 +25,8 @@ class SequentialLayeredModel(object):
         pprint(description)
         self.description = description
 
+        self.n_layers = len(self.description) - 1
+
         self.in_shape = in_shape
 
         self.filterbanks = {}
@@ -33,6 +35,95 @@ class SequentialLayeredModel(object):
             self.process = profile(self.process)
         except NameError:
             pass
+
+    def _extract_nb_and_stride(self):
+        """this tiny helper function extracts the neighborhood
+        parameters (i.e. `inker_shape` for `lnorm`, `filter_shape`
+        for `fbcorr` and `ker_shape` for `lpool`) along with the
+        striding parameters (here only for `lpool`)"""
+
+        final_list = []
+        for layer in self.description:
+            for operation in layer:
+                if operation[0] == 'lnorm':
+                    nbh, nbw = operation[1]['kwargs']['inker_shape']
+                    final_list += [(nbh, nbw, 1)]
+                elif operation[0] == 'fbcorr':
+                    nbh, nbw = operation[1]['initialize']['filter_shape']
+                    final_list += [(nbh, nbw, 1)]
+                else:
+                    nbh, nbw = operation[1]['kwargs']['ker_shape']
+                    striding = operation[1]['kwargs']['stride']
+                    final_list += [(nbh, nbw, striding)]
+
+        return final_list
+
+    def _layer_output_2Dshape(self,
+                              nlayers):
+        """this helper function computes the expected shape
+        of a feature array after having been processed by
+        a predefined number of layers
+        """
+
+        # -- simple check on the number of layers
+        assert 0 <= nlayers <= self.n_layers
+
+        layer_param = self._extract_nb_and_stride()
+        nmax = 1 + 3 * nlayers
+        h, w = self.in_shape[:2]
+
+        for parameters in layer_param[:nmax]:
+            nbh, nbw, s = parameters
+            h = 1 + (h - nbh) / s
+            w = 1 + (w - nbw) / s
+
+        return (h, w)
+
+    def rcp_field_central_px_coords(self,
+                                    nlayers,
+                                    x_coords=-1,
+                                    y_coords=-1):
+        """Given nlayers (which gives the level at which we look
+        at the output of the SLM), and given the coordinates of a
+        certain amount of chosen pixel coordinates on the output
+        of that layer, this routine will compute the central point
+        coordinates of each receptive fields.
+        """
+
+        h_max, w_max = self._layer_output_2Dshape(nlayers)
+
+        # -- checks on number of layers
+        assert 0 <= nlayers <= self.n_layers
+
+        # -- by default we want to consider all the pixel values
+        #    at the layer requested
+        if x_coords == -1 and y_coords == -1:
+            x_coords, y_coords = np.mgrid[0:h_max:1, 0:w_max:1]
+            x_coords = x_coords.ravel()
+            y_coords = y_coords.ravel()
+
+        # -- checks on input coordinate arrays
+        x_coords = np.array(x_coords).astype(int)
+        y_coords = np.array(y_coords).astype(int)
+        assert x_coords.ndim == 1
+        assert y_coords.ndim == 1
+        assert x_coords.size == y_coords.size
+
+        # -- checks on the coordinate ranges
+        assert 0 <= x_coords.min()
+        assert x_coords.max() < h_max
+        assert 0 <= y_coords.min()
+        assert y_coords.max() < w_max
+
+        layer_param = self._extract_nb_and_stride()
+        nmax = 1 + 3 * nlayers
+
+        for parameters in reversed(layer_param[:nmax]):
+            nbh, nbw, s = parameters
+            x_coords = nbh / 2 + x_coords * s
+            y_coords = nbw / 2 + y_coords * s
+
+        return (x_coords, y_coords)
 
     def process(self, arr_in):
         """XXX: docstring for process"""
@@ -148,174 +239,3 @@ class SequentialLayeredModel(object):
                 assert tmp_out.dtype == np.float32
 
         return tmp_out
-
-
-def main():
-
-    import genson
-    from os import path
-    from numpy.testing import assert_allclose
-    from sthor.util.testing import assert_allclose_round
-    #from pythor3.utils.testing import assert_allclose_round
-    #from thoreano.slm import TheanoSLM
-
-    mypath = path.dirname(__file__)
-
-    RTOL = 1e-2
-    ATOL = 1e-4
-
-    # -- Raise exceptions on floating-point errors
-    np.seterr(all='raise')
-
-    gt_time = 0
-    gv_time = 0
-
-    iter = 0
-    while True:
-        with open(path.join(mypath, 'plos09.gson')) as fin:
-            gen = genson.loads(fin.read())
-
-        desc = gen.next()
-        genson.default_random_seed = 1
-
-        ## -- L3 1st
-        #desc = [
-            #[('lnorm',
-              #{'kwargs': {'inker_shape': [9, 9],
-                          #'outker_shape': [9, 9],
-                          #'remove_mean': False,
-                          #'stretch': 10,
-                          #'threshold': 1}})],
-            #[('fbcorr',
-              ##{'initialize': ['426b269c1bfeec366992218fb6e0cb5252cd7f69',
-                              ##(64, 3, 3)],
-              #{'initialize': {'filter_shape': (3, 3),
-                              #'generate': ('random:uniform', {'rseed': 42}),
-                              #'n_filters': 64},
-               #'kwargs': {'max_out': None, 'min_out': 0}}),
-             #('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 1, 'stride': 2}}),
-             #('lnorm',
-              #{'kwargs': {'inker_shape': [5, 5],
-                          #'outker_shape': [5, 5],
-                          #'remove_mean': False,
-                          #'stretch': 0.10000000000000001,
-                          #'threshold': 1}})],
-            #[('fbcorr',
-              ##{'initialize': ['9f1a2ad385682d076a7feacd923e50c330df4e29',
-                              ##(128, 5, 5, 64)],
-              #{'initialize': {'filter_shape': (5, 5),
-                              #'generate': ('random:uniform', {'rseed': 42}),
-                              #'n_filters': 128},
-               #'kwargs': {'max_out': None, 'min_out': 0}}),
-             #('lpool', {'kwargs': {'ker_shape': [5, 5], 'order': 1, 'stride': 2}}),
-             #('lnorm',
-              #{'kwargs': {'inker_shape': [7, 7],
-                          #'outker_shape': [7, 7],
-                          #'remove_mean': False,
-                          #'stretch': 1,
-                          #'threshold': 1}})],
-            #[('fbcorr',
-              ##{'initialize': ['d79b5af0732b177b2a9170288ba8f73727b56354',
-                              ##(256, 5, 5, 128)],
-              #{'initialize': {'filter_shape': (5, 5),
-                              #'generate': ('random:uniform', {'rseed': 42}),
-                              #'n_filters': 256},
-               #'kwargs': {'max_out': None, 'min_out': 0}}),
-             #('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}}),
-             #('lnorm',
-              #{'kwargs': {'inker_shape': [3, 3],
-                          #'outker_shape': [3, 3],
-                          #'remove_mean': False,
-                          #'stretch': 10,
-                          #'threshold': 1}})]
-        #]
-
-        in_shape = 200, 200, 1
-
-        from pythor3 import model
-        print 'create gt slm'
-        try:
-            slm_gt = model.slm.SequentialLayeredModel(
-                in_shape, desc,
-                plugin='passthrough',
-                plugin_kwargs={
-                    'plugin_mapping':{
-                        'all':{
-                            #'plugin':'scipy_naive',
-                            #'plugin_kwargs': {},
-                            'plugin':'cthor',
-                            #'plugin_kwargs': {'variant': 'icc:sse:tbb'},
-                            'plugin_kwargs': {'variant': 'sse:tbb'},
-                        }
-                    }
-                })
-        except ValueError, err:
-            print err
-            continue
-
-        print 'create gv slm'
-        slm_gv = SequentialLayeredModel(in_shape, desc)
-        #slm_gt = TheanoSLM((200, 200, 1), desc)
-        #slm_gv = TheanoSLM((200, 200, 1), desc)
-
-        #from scipy import misc
-        #a = misc.lena()
-        #a = misc.imresize(a, (200, 200)) / 1.0
-        #a.shape = a.shape[:2] + (1,)
-        #a -= a.min()
-        #a /= a.max()
-        #a = a.astype('f')
-
-        #print a.dtype
-        #raise
-        a = np.random.randn(200, 200, 1).astype('f')
-        a -= a.min()
-        a /= a.max()
-        a = a.astype('f')
-
-        import time
-        W = 2
-        for i in xrange(W):
-            slm_gt.process(a)
-            slm_gv.process(a.astype(DTYPE))
-
-        N = 10
-        for i in xrange(N):
-            iter += 1
-            print 'iter', iter
-            np.random.seed(iter)
-            #np.random.seed(20)
-            a = np.random.randn(200, 200, 1).astype('f')
-            a -= a.min()
-            a /= a.max()
-            a = a.astype('f')
-
-            #print 'a.mean()', a.mean()
-            #print 'np.linalg.norm(a)', np.linalg.norm(a)
-
-            x = a.copy()
-            start = time.time()
-            gt = slm_gt.process(x)
-            gt_time += time.time() - start
-
-            x = a.copy()
-            start = time.time()
-            gv = slm_gv.process(x.astype(DTYPE))
-            gv_time += time.time() - start
-
-            print 'norm', np.linalg.norm(gv - gt)
-            print 'abs max', np.absolute(gv - gt).max()
-            tmp = np.absolute(gv - gt)
-            print tmp.ravel().argmax()
-            print gv[tmp == tmp.max()]
-            print gt[tmp == tmp.max()]
-            #assert np.absolute(gv - gt).max() < 1e-3
-            #assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)
-            #assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
-
-        #print 'gv fps', N / gv_time
-        #print 'gt fps', N / gt_time
-        print 'speedup', gt_time / gv_time
-
-if __name__ == '__main__':
-    main()
