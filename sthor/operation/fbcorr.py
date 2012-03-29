@@ -9,7 +9,7 @@ __all__ = ['fbcorr3']
 
 import numpy as np
 from skimage.util.shape import view_as_windows
-from sthor.util.pad import pad
+from sthor.util.pad import pad2d
 
 DEFAULT_STRIDE = 1
 
@@ -38,7 +38,7 @@ def fbcorr3(arr_in,
     # -- if mode == 'same', we pad the tensor with a
     #    constant value along the first two directions
     if mode.lower() == 'same':
-        arr_in = pad(arr_in, (fbh, fbw), pad_val)
+        arr_in = pad2d(arr_in, (fbh, fbw), pad_val)
 
     inh, inw, ind = arr_in.shape
 

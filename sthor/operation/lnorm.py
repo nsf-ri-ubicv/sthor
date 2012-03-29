@@ -10,7 +10,7 @@ __all__ = ['lcdnorm3']
 import numpy as np
 
 from skimage.util.shape import view_as_windows
-from sthor.util.pad import pad
+from sthor.util.pad import pad2d
 
 EPSILON = 1e-4
 DEFAULT_STRIDE = 1
@@ -47,7 +47,7 @@ def lcdnorm3(arr_in, neighborhood,
     # -- if mode == 'same', we pad the tensor with a
     #    constant value along the first two directions
     if mode.lower() == 'same':
-        arr_in = pad(arr_in, neighborhood, pad_val)
+        arr_in = pad2d(arr_in, neighborhood, pad_val)
 
     inh, inw, ind = arr_in.shape
 

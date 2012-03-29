@@ -8,7 +8,7 @@
 import numpy as np
 
 
-def pad(arr_in, neighborhood, pad_val=0.):
+def pad2d(arr_in, neighborhood, pad_val=0.):
     """Returns a padded array with constant values for the
     padding. The first two dimensions of the input array
     are padded, not the third one.
