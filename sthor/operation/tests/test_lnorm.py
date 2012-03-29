@@ -99,3 +99,66 @@ def test_lena_npy_array_non_C_contiguous():
     arr_out = lcdnorm3(arr_in, neighborhood)
     gv = arr_out[idx]
     assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
+
+
+def test_mode_same():
+
+    pad = 1.83
+    arr_in = np.arange(9).reshape(3,3).astype(DTYPE)
+    arr_in.shape = arr_in.shape[:2] + (1,)
+    neighborhood = 2, 2
+
+    gt = np.zeros(9).reshape(3,3).astype(DTYPE)
+    gt.shape = gt.shape[:2] + (1,)
+
+    dummy = np.zeros(16).reshape(4,4).astype(DTYPE)
+    dummy.shape = dummy.shape[:2] + (1,)
+    dummy[0, :, :] = pad
+    dummy[:, 0, :] = pad
+    dummy[1:, 1:, :] = arr_in
+
+    # -- compute reference array
+    for i in xrange(3):
+        for j in xrange(3):
+            patch = dummy[i:i+2, j:j+2, :]
+            mean = patch.mean()
+            new_patch = patch - mean
+            norm = np.sqrt((new_patch ** 2).sum())
+            gt[i, j, :] = new_patch[1, 1, :] / norm
+
+    gv = lcdnorm3(arr_in, neighborhood,
+                  threshold=0.,
+                  mode='same', pad_val=pad)
+
+    assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
+
+
+def test_mode_same_with_valid():
+
+    pad = 2.17
+    arr_in = np.arange(9).reshape(3,3).astype(DTYPE)
+    arr_in.shape = arr_in.shape[:2] + (1,)
+    neighborhood = 2, 2
+
+    gt = np.zeros(9).reshape(3,3).astype(DTYPE)
+    gt.shape = gt.shape[:2] + (1,)
+
+    dummy = np.zeros(16).reshape(4,4).astype(DTYPE)
+    dummy.shape = dummy.shape[:2] + (1,)
+    dummy[0, :, :] = pad
+    dummy[:, 0, :] = pad
+    dummy[1:, 1:, :] = arr_in
+
+    # -- compute reference array
+    for i in xrange(3):
+        for j in xrange(3):
+            patch = dummy[i:i+2, j:j+2, :]
+            mean = patch.mean()
+            new_patch = patch - mean
+            norm = np.sqrt((new_patch ** 2).sum())
+            gt[i, j, :] = new_patch[1, 1, :] / norm
+
+    gv = lcdnorm3(dummy, neighborhood,
+                  threshold=0.)
+
+    assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)

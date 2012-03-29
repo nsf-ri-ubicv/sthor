@@ -185,3 +185,47 @@ def test_test_lena_npy_array():
     arr_out = lpool3(arr_in, neighborhood)
     gv = arr_out[idx]
     assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)
+
+
+def test_mode_same_order_one():
+
+    a = 2.37
+    pad = 1.83
+    order = 1.
+    arr_in = a * np.ones((3,3)).astype(DTYPE)
+    arr_in.shape = arr_in.shape[:2] + (1,)
+    neighborhood = 2, 2
+
+    v1 = (3. * pad ** (order) + a ** (order)) ** (1. / order)
+    v2 = (2. * pad ** (order) + 2. * a ** (order)) ** (1. / order)
+    v3 = (4. * a ** (order)) ** (1. / order)
+    gt = np.array([[v1, v2, v2], [v2, v3, v3], [v2, v3, v3]])
+    gt.shape = gt.shape[:2] + (1,)
+
+    gv = lpool3(arr_in, neighborhood,
+                order=order,
+                mode='same', pad_val=pad)
+
+    assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)
+
+
+def test_mode_same_order_two():
+
+    a = 2.37
+    pad = 1.83
+    order = 2.
+    arr_in = a * np.ones((3,3)).astype(DTYPE)
+    arr_in.shape = arr_in.shape[:2] + (1,)
+    neighborhood = 2, 2
+
+    v1 = (3. * pad ** (order) + a ** (order)) ** (1. / order)
+    v2 = (2. * pad ** (order) + 2. * a ** (order)) ** (1. / order)
+    v3 = (4. * a ** (order)) ** (1. / order)
+    gt = np.array([[v1, v2, v2], [v2, v3, v3], [v2, v3, v3]])
+    gt.shape = gt.shape[:2] + (1,)
+
+    gv = lpool3(arr_in, neighborhood,
+                order=order,
+                mode='same', pad_val=pad)
+
+    assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)

@@ -284,6 +284,28 @@ def test_arr_out_3d():
     gv = arr_out[idx]
     assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
 
+
+def test_mode_same():
+
+    a = 2.37
+    b = 0.97
+    pad = 1.83
+    arr_in = a * np.ones((3,3)).astype(DTYPE)
+    arr_in.shape = arr_in.shape[:2] + (1,)
+    neighborhood = 2, 2, 1, 2
+    arr_fb = b * np.ones(neighborhood).astype(DTYPE)
+
+    v1 = b * (3. * pad + a)
+    v2 = b * (2. * pad + 2. * a)
+    v3 = 4. * b * a
+    gt = np.array([[v1, v2, v2], [v2, v3, v3], [v2, v3, v3]])
+    gt = np.dstack((gt, gt))
+
+    gv = fbcorr3(arr_in, arr_fb,
+                 mode='same', pad_val=pad)
+
+    assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
+
 # -----------------------------------------------------------------------------
 # -- Test Errors
 # -----------------------------------------------------------------------------
