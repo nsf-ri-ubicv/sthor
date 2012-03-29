@@ -32,10 +32,12 @@ def fbcorr3(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
 
     if arr_out is not None:
         assert arr_out.dtype == arr_in.dtype
-        assert arr_out.shape == (inh - fbh + 1, inw - fbw + 1, fbn)
+        assert arr_out.shape == (1 + (inh - fbh) / stride,
+                                 1 + (inw - fbw) / stride,
+                                 fbn)
 
     # -- reshape arr_in
-    arr_inr = view_as_windows(arr_in, (fbh, fbw, fbd))
+    arr_inr = view_as_windows(arr_in, (fbh, fbw, fbd))[::stride, ::stride]
     outh, outw = arr_inr.shape[:2]
     arr_inrm = arr_inr.reshape(outh * outw, -1)
 
