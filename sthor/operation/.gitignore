@@ -1,4 +1,5 @@
+build
 _resample.html
 _resample.pyx.md5
 _resample.so
-build
+_resample.c
