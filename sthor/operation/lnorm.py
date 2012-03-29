@@ -10,7 +10,6 @@ __all__ = ['lcdnorm3']
 import numpy as np
 
 from skimage.util.shape import view_as_windows
-from sthor.util.pad import pad2d
 
 EPSILON = 1e-4
 DEFAULT_STRIDE = 1
@@ -21,8 +20,6 @@ DEFAULT_DIVISIVE = True
 
 
 def lcdnorm3(arr_in, neighborhood,
-             mode='valid',
-             pad_val=0.,
              contrast=DEFAULT_CONTRAST,
              divisive=DEFAULT_DIVISIVE,
              stretch=DEFAULT_STRETCH,
@@ -38,16 +35,6 @@ def lcdnorm3(arr_in, neighborhood,
     assert isinstance(contrast, bool)
     assert isinstance(divisive, bool)
     assert contrast or divisive
-
-    # -- mode check
-    supported_modes = ['valid', 'same']
-    if mode.lower() not in supported_modes:
-        raise ValueError('mode "%s" not supported' % mode)
-
-    # -- if mode == 'same', we pad the tensor with a
-    #    constant value along the first two directions
-    if mode.lower() == 'same':
-        arr_in = pad2d(arr_in, neighborhood, pad_val)
 
     inh, inw, ind = arr_in.shape
 
