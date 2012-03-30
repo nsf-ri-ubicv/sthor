@@ -51,9 +51,12 @@ def lcdnorm3(arr_in, neighborhood,
                                  ind)
 
     # -- prepare arr_out
-    ys = nbh / 2
-    xs = nbw / 2
-    _arr_out = arr_in[ys:-ys, xs:-xs]
+    lys = nbh / 2
+    lxs = nbw / 2
+    rys = (nbh - 1) / 2
+    rxs = (nbw - 1) / 2
+    _arr_out = arr_in[lys:inh-rys, lxs:inw-rxs][::stride, ::stride]
+
 
     # -- Contrast Normalization
     if contrast:
