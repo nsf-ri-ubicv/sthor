@@ -16,7 +16,7 @@ def filter_pad2d(arr_in, filter_shape2d, constant=0):
     Parameters
     ----------
 
-    `arr_in`: array-like, shape = [height, weight, depth]
+    `arr_in`: array-like, shape = [height, width, depth]
         input 3D array to pad along the first two dimensions
 
     `filter_shape2d`: 2-tuple
