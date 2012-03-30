@@ -46,12 +46,17 @@ def lcdnorm3(arr_in, neighborhood,
 
     if arr_out is not None:
         assert arr_out.dtype == arr_in.dtype
-        assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
+        assert arr_out.shape == (1 + (inh - nbh) / stride,
+                                 1 + (inw - nbw) / stride,
+                                 ind)
 
     # -- prepare arr_out
-    ys = nbh / 2
-    xs = nbw / 2
-    _arr_out = arr_in[ys:-ys, xs:-xs]
+    lys = nbh / 2
+    lxs = nbw / 2
+    rys = (nbh - 1) / 2
+    rxs = (nbw - 1) / 2
+    _arr_out = arr_in[lys:inh-rys, lxs:inw-rxs][::stride, ::stride]
+
 
     # -- Contrast Normalization
     if contrast:
