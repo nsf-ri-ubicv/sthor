@@ -25,6 +25,8 @@ class SequentialLayeredModel(object):
         pprint(description)
         self.description = description
 
+        self.n_layers = len(self.description) - 1
+
         self.in_shape = in_shape
 
         self.filterbanks = {}
@@ -33,6 +35,95 @@ class SequentialLayeredModel(object):
             self.process = profile(self.process)
         except NameError:
             pass
+
+    def _extract_nb_and_stride(self):
+        """this tiny helper function extracts the neighborhood
+        parameters (i.e. `inker_shape` for `lnorm`, `filter_shape`
+        for `fbcorr` and `ker_shape` for `lpool`) along with the
+        striding parameters (here only for `lpool`)"""
+
+        final_list = []
+        for layer in self.description:
+            for operation in layer:
+                if operation[0] == 'lnorm':
+                    nbh, nbw = operation[1]['kwargs']['inker_shape']
+                    final_list += [(nbh, nbw, 1)]
+                elif operation[0] == 'fbcorr':
+                    nbh, nbw = operation[1]['initialize']['filter_shape']
+                    final_list += [(nbh, nbw, 1)]
+                else:
+                    nbh, nbw = operation[1]['kwargs']['ker_shape']
+                    striding = operation[1]['kwargs']['stride']
+                    final_list += [(nbh, nbw, striding)]
+
+        return final_list
+
+    def _layer_output_2Dshape(self,
+                              nlayers):
+        """this helper function computes the expected shape
+        of a feature array after having been processed by
+        a predefined number of layers
+        """
+
+        # -- simple check on the number of layers
+        assert 0 <= nlayers <= self.n_layers
+
+        layer_param = self._extract_nb_and_stride()
+        nmax = 1 + 3 * nlayers
+        h, w = self.in_shape[:2]
+
+        for parameters in layer_param[:nmax]:
+            nbh, nbw, s = parameters
+            h = 1 + (h - nbh) / s
+            w = 1 + (w - nbw) / s
+
+        return (h, w)
+
+    def rcp_field_central_px_coords(self,
+                                    nlayers,
+                                    x_coords=-1,
+                                    y_coords=-1):
+        """Given nlayers (which gives the level at which we look
+        at the output of the SLM), and given the coordinates of a
+        certain amount of chosen pixel coordinates on the output
+        of that layer, this routine will compute the central point
+        coordinates of each receptive fields.
+        """
+
+        h_max, w_max = self._layer_output_2Dshape(nlayers)
+
+        # -- checks on number of layers
+        assert 0 <= nlayers <= self.n_layers
+
+        # -- by default we want to consider all the pixel values
+        #    at the layer requested
+        if x_coords == -1 and y_coords == -1:
+            x_coords, y_coords = np.mgrid[0:h_max:1, 0:w_max:1]
+            x_coords = x_coords.ravel()
+            y_coords = y_coords.ravel()
+
+        # -- checks on input coordinate arrays
+        x_coords = np.array(x_coords).astype(int)
+        y_coords = np.array(y_coords).astype(int)
+        assert x_coords.ndim == 1
+        assert y_coords.ndim == 1
+        assert x_coords.size == y_coords.size
+
+        # -- checks on the coordinate ranges
+        assert 0 <= x_coords.min()
+        assert x_coords.max() < h_max
+        assert 0 <= y_coords.min()
+        assert y_coords.max() < w_max
+
+        layer_param = self._extract_nb_and_stride()
+        nmax = 1 + 3 * nlayers
+
+        for parameters in reversed(layer_param[:nmax]):
+            nbh, nbw, s = parameters
+            x_coords = nbh / 2 + x_coords * s
+            y_coords = nbw / 2 + y_coords * s
+
+        return (x_coords, y_coords)
 
     def process(self, arr_in):
         """XXX: docstring for process"""
