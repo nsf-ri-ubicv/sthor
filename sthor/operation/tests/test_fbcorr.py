@@ -284,6 +284,64 @@ def test_arr_out_3d():
     gv = arr_out[idx]
     assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
 
+
+def test_stride():
+
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    arr_fb = np.ones((4, 3, 3, 5)).astype(DTYPE)
+
+    arr_out = fbcorr3(arr_in, arr_fb, stride=2)
+    assert arr_out.shape == (1, 1, 5)
+
+
+def test_stride_with_arr_out():
+
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    arr_fb = np.ones((4, 3, 3, 5)).astype(DTYPE)
+    arr_out = np.empty((1, 1, 5)).astype(DTYPE)
+
+    arr_out = fbcorr3(arr_in, arr_fb, stride=2)
+    assert arr_out.shape == (1, 1, 5)
+
+
+def test_max_filter_size():
+
+    a = 1.23
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    arr_fb = a * np.ones((4, 3, 3, 5)).astype(DTYPE)
+
+    arr_out = fbcorr3(arr_in, arr_fb)
+    assert arr_out.shape == (1, 2, 5)
+
+
+def test_max_filter_size_with_arr_out():
+
+    a = 1.23
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    arr_fb = a * np.ones((4, 3, 3, 5)).astype(DTYPE)
+    arr_out = np.empty((1, 2, 5)).astype(DTYPE)
+
+    arr_out = fbcorr3(arr_in, arr_fb)
+    assert arr_out.shape == (1, 2, 5)
+
+
+def test_smoke_stride():
+
+    np.random.seed(42)
+
+    arr_in = np.random.randn(4, 4, 3).astype(DTYPE)
+    arr_fb = np.ones((4, 3, 3, 5)).astype(DTYPE)
+
+    arr_out = fbcorr3(arr_in, arr_fb)
+
+    idx = (0, 1, 3)
+    ref = -2.80072999
+
+    res = arr_out[idx]
+
+    assert (ref - res) < ATOL
+
+
 # -----------------------------------------------------------------------------
 # -- Test Errors
 # -----------------------------------------------------------------------------
