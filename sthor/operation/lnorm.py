@@ -1,226 +1,122 @@
-"""
-Local Normalization Operation.
-
-Easy-to-understand (but slow) naive numpy implementation.
-"""
+"""Local Normalization Operations"""
 
 # Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
+#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
 #
-# License: Proprietary
+# License: BSD
 
-__all__ = ['LNormScipyNaive']
+__all__ = ['lcdnorm3']
 
-# -- Imports
 import numpy as np
-from pythor3.operation.common.lsum import lsum
-from pythor3.operation.lnorm_.plugins import LNormPlugin
 
-# -- Small epsilon
-from pythor3.operation.lnorm_ import EPSILON
+from skimage.util.shape import view_as_windows
 
-# -- Contracts
-from pythor3.operation.lnorm_ import (
-    assert_postconditions_on_properties,
-    assert_postconditions_on_data,
-)
+EPSILON = 1e-4
+DEFAULT_STRIDE = 1
+DEFAULT_THRESHOLD = 1.0
+DEFAULT_STRETCH = 1.0
+DEFAULT_CONTRAST = True
+DEFAULT_DIVISIVE = True
 
 
-class LNormScipyNaive(LNormPlugin):
+def lcdnorm3(arr_in, neighborhood,
+             contrast=DEFAULT_CONTRAST,
+             divisive=DEFAULT_DIVISIVE,
+             stretch=DEFAULT_STRETCH,
+             threshold=DEFAULT_THRESHOLD,
+             stride=DEFAULT_STRIDE, arr_out=None):
+    """3D Local Contrast Divisive Normalization
 
-    def run(self):
-        """XXX: docstring"""
+    XXX: docstring
+    """
 
-        arr_in = self.arr_in
-        #assert_preconditions_on_data(arr_in)
-        if arr_in.ndim == 2:
-            _arr_in = arr_in[:, :, None]
+    assert arr_in.ndim == 3
+    assert len(neighborhood) == 2
+    assert isinstance(contrast, bool)
+    assert isinstance(divisive, bool)
+    assert contrast or divisive
+
+    inh, inw, ind = arr_in.shape
+
+    nbh, nbw = neighborhood
+    assert nbh <= inh
+    assert nbw <= inw
+
+    nb_size = 1. * nbh * nbw * ind
+
+    if arr_out is not None:
+        assert arr_out.dtype == arr_in.dtype
+        assert arr_out.shape == (1 + (inh - nbh) / stride,
+                                 1 + (inw - nbw) / stride,
+                                 ind)
+
+    # -- prepare arr_out
+    lys = nbh / 2
+    lxs = nbw / 2
+    rys = (nbh - 1) / 2
+    rxs = (nbw - 1) / 2
+    _arr_out = arr_in[lys:inh-rys, lxs:inw-rxs][::stride, ::stride]
+
+
+    # -- Contrast Normalization
+    if contrast:
+
+        # -- local sums
+        arr_sum = arr_in.sum(-1)
+        arr_sum = view_as_windows(arr_sum, (1, nbw)).sum(-1)[:, ::stride, 0]
+        arr_sum = view_as_windows(arr_sum, (nbh, 1)).sum(-2)[::stride, :]
+
+        # -- remove the mean
+        _arr_out = _arr_out - arr_sum / nb_size
+
+    # -- Divisive (gain) Normalization
+    if divisive:
+
+        # -- local sums of squares
+        arr_ssq = (arr_in ** 2.0).sum(-1)
+        arr_ssq = view_as_windows(arr_ssq, (1, nbw)).sum(-1)[:, ::stride, 0]
+        arr_ssq = view_as_windows(arr_ssq, (nbh, 1)).sum(-2)[::stride, :]
+
+        # -- divide by the euclidean norm
+        if contrast:
+            l2norms = (arr_ssq - (arr_sum ** 2.0) / nb_size)
         else:
-            _arr_in = arr_in
+            l2norms = arr_ssq
 
-        arr_out = self.arr_out
-        if arr_out.ndim == 2:
-            _arr_out = arr_out[:, :, None]
-        else:
-            _arr_out = arr_out
+        #l2norms = l2norms.clip(0, np.inf)
+        #val = l2norms.copy()
+        np.putmask(l2norms, l2norms < 0., 0.)
+        l2norms = np.sqrt(l2norms) + EPSILON
+        #l2norms = np.sqrt(l2norms)
 
-        ker_h, ker_w = inker_shape = self.inker_shape
-        outker_shape = self.outker_shape
-        dtype = self.arr_in.dtype
-        out_shape = _arr_out.shape
-
-        remove_mean = self.remove_mean
-        div_method = self.div_method
-        threshold = self.threshold
-        stretch = self.stretch
-
-        # input (min/max)
-        arr_src = _arr_in[:].copy()
-
-        # ---------------------------------------------------------------------
-        # compute corresponding numerator (arr_num) and divisor (arr_div)
-        # ---------------------------------------------------------------------
-        # -- handle outker_shape=inker_shape (full)
-        if outker_shape == inker_shape:
-            # -- sum kernel
-            in_d = _arr_in.shape[-1]
-            kshape = list(inker_shape) + [in_d]
-            ker = np.ones(kshape, dtype=dtype)
-            size = float(ker.size)
-
-            # -- compute sum-of-square
-            arr_sq = arr_src ** 2.
-            assert np.isfinite(arr_sq).all()
-
-            arr_ssq = lsum(arr_sq, kshape, mode='valid').astype(dtype)
-            assert np.isfinite(arr_ssq).all()
-
-            # -- compute arr_num and arr_div
-            # preparation
-            ys = inker_shape[0] / 2
-            xs = inker_shape[1] / 2
-            arr_out_h, arr_out_w, arr_out_d = out_shape[-3:]
-            hs = arr_out_h
-            ws = arr_out_w
-
-            # compute 'euclidean' (magnitude) divisor (norm = 1)
-            if div_method == 'euclidean':
-                # with mean substraction
-                if remove_mean:
-                    arr_sum = lsum(arr_src, kshape, mode='valid').astype(dtype)
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws] \
-                            - (arr_sum / size)
-                    val = (arr_ssq - (arr_sum ** 2.) / size)
-                    # to avoid sqrt of negative numbers
-                    np.putmask(val, val < 0, 0)
-                    arr_div = np.sqrt(val) + EPSILON
-
-                # without mean substraction
-                else:
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws]
-                    # arr_ssq should not have any value < 0
-                    # however, it can happen (e.g. with fftconvolve)
-                    # so we ensure to set these values to 0
-                    np.putmask(arr_ssq, arr_ssq < 0., 0.)
-                    arr_div = np.sqrt(arr_ssq) + EPSILON
-
-            # or compute 'std' (standard deviation) divisor (var = 1)
-            elif div_method == 'std':
-                arr_sum = lsum(arr_src, kshape, mode='valid').astype(dtype)
-                # with mean substraction
-                if remove_mean:
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws] \
-                            - (arr_sum / size)
-
-                # without mean substraction
-                else:
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws]
-
-                val = (arr_ssq / size - (arr_sum / size) ** 2.)
-                # to avoid sqrt of a negative number
-                np.putmask(val, val < 0., 0.)
-                arr_div = np.sqrt(val) + EPSILON
-
-            else:
-                raise ValueError("div_method='%s' not understood" % div_method)
-
-        # ---------------------------------------------------------------------
-        # -- handle outker_shape=(0,0) (per depth dim) *NOT TESTED*
-        elif outker_shape == (0, 0):
-            # -- output shape
-            in_h, in_w, in_d = _arr_in.shape[-3:]
-            kin_h, kin_w = inker_shape
-            arr_out_h = (in_h - kin_h + 1)
-            arr_out_w = (in_w - kin_w + 1)
-            arr_out_d = in_d
-            arr_out_shape = arr_out_h, arr_out_w, arr_out_d
-
-            # -- sum kernel
-            ker = np.ones(inker_shape, dtype=dtype)
-            size = float(ker.size)
-
-            # -- compute sum-of-square
-            arr_sq = arr_src ** 2.
-            arr_ssq = lsum(arr_sq, inker_shape + (1,), mode='valid')
-            arr_ssq = arr_ssq.astype(dtype)
-
-            # -- compute arr_num and arr_div
-            # preparation
-            ys = inker_shape[0] / 2
-            xs = inker_shape[1] / 2
-            arr_out_h, arr_out_w, arr_out_d = out_shape[-3:]
-            hs = arr_out_h
-            ws = arr_out_w
-
-            def get_arr_sum():
-                arr_sum = np.empty(arr_out_shape, dtype=dtype)
-                for d in xrange(in_d):
-                    slice2d = lsum(arr_src[:, :, d], inker_shape, mode='valid')
-                    slice2d = slice2d.astype(dtype)
-                    arr_sum[:, :, d] = slice2d
-                return arr_sum
-
-            # compute 'euclidean' (magnitude) divisor (norm = 1)
-            if div_method == 'euclidean':
-                # with mean substraction
-                if remove_mean:
-                    arr_sum = get_arr_sum()
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws] \
-                            - (arr_sum / size)
-                    val = (arr_ssq - (arr_sum ** 2.) / size)
-                    # to avoid sqrt of a negative number
-                    np.putmask(val, val < 0., 0.)
-                    arr_div = np.sqrt(val) + EPSILON
-
-                # without mean substraction
-                else:
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws]
-                    arr_div = np.sqrt(arr_ssq) + EPSILON
-
-            # or compute 'std' (standard deviation) divisor (var = 1)
-            elif div_method == 'std':
-                arr_sum = get_arr_sum()
-                # with mean substraction
-                if remove_mean:
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws] \
-                            - (arr_sum / size)
-
-                # without mean substraction
-                else:
-                    arr_num = arr_src[ys:ys + hs, xs:xs + ws]
-
-                val = (arr_ssq / size - (arr_sum / size) ** 2.)
-                # to avoid sqrt of a negative number
-                np.putmask(val, val < 0., 0.)
-                arr_div = np.sqrt(val) + EPSILON
-            else:
-                raise ValueError("div_method '%s' not understood" % div_method)
-        else:
-            raise ValueError(
-                'inker_shape=%s and outker_shape=%s not understood'
-                % (inker_shape, outker_shape)
-            )
-
-        # ---------------------------------------------------------------------
-        # apply normalization
-        # ---------------------------------------------------------------------
         if stretch != 1:
-            arr_num *= stretch
-            arr_div *= stretch
+            _arr_out *= stretch
+            l2norms *= stretch
 
-        # volume threshold
-        assert np.isfinite(arr_div).all()
-        np.putmask(arr_div, arr_div < (threshold + EPSILON), 1.)
+        # XXX: use numpy-1.7.0 copyto()
+        #np.putmask(l2norms, l2norms < (threshold + stretch * EPSILON), 1.0)
+        np.putmask(l2norms, l2norms < (threshold + EPSILON), 1.0)
+        #np.putmask(l2norms, l2norms < threshold, 1.0)
 
-        # output (min/max)
-        assert np.isfinite(arr_num).all()
-        assert np.isfinite(arr_div).all()
-        _arr_out[:] = (arr_num / arr_div)
+        #print 'XXX', l2norms.mean()
 
-        if arr_in.ndim == 2:
-            _arr_out.shape = _arr_out.shape[:2]
+        #import IPython; ipshell = IPython.embed; ipshell(banner1='ipshell')
 
-        # -- Contracts: postconditions
-        assert_postconditions_on_properties(_arr_in, _arr_out, inker_shape)
-        assert_postconditions_on_data(_arr_out)
+        # -- avoid zero division
+        #np.putmask(l2norms, l2norms < EPSILON, EPSILON)
 
-        return _arr_out
+        _arr_out = _arr_out / l2norms
+
+    if arr_out is not None:
+        arr_out[:] = _arr_out
+    else:
+        arr_out = _arr_out
+
+    assert arr_out.dtype == arr_in.dtype  # XXX: should go away
+
+    return arr_out
+
+try:
+    lcdnorm3 = profile(lcdnorm3)
+except NameError:
+    pass

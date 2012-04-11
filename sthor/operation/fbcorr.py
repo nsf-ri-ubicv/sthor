@@ -1,45 +1,59 @@
-"""Filterbank Correlation Operation."""
+"""Filterbank Correlation Operation"""
 
 # Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
-#          Nicolas Poilver <nicolas.poilvert@gmail.com>
+#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
 #
 # License: BSD
 
-__all__ = ['fbcorr']
-
+__all__ = ['fbcorr3']
 
 import numpy as np
-from scipy.signal import correlate
+from skimage.util.shape import view_as_windows
 
 DEFAULT_STRIDE = 1
 
 
-def fbcorr(arr_in, arr_fb, arr_out=None, stride=DEFAULT_STRIDE):
-    """XXX: docstring"""
+def fbcorr3(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
+    """3D Filterbank Correlation
+    XXX: docstring
+    """
 
-    # -- Temporary constraints
-    # XXX: make fbcorr n-dimensional
     assert arr_in.ndim == 3
     assert arr_fb.ndim == 4
-
-    # -- check arguments
-    assert arr_in.dtype == arr_fb.dtype
+    assert arr_fb.dtype == arr_in.dtype
 
     inh, inw, ind = arr_in.shape
     fbh, fbw, fbd, fbn = arr_fb.shape
 
-    out_shape = (inh - fbh + 1), (inw - fbw + 1), fbn
+    assert fbn > 1
+    assert fbh <= inh
+    assert fbw <= inw
+    assert fbd == ind
 
-    # -- Create output array if necessary
-    if arr_out is None:
-        arr_out = np.empty(out_shape, dtype=arr_in.dtype)
+    if arr_out is not None:
+        assert arr_out.dtype == arr_in.dtype
+        assert arr_out.shape == (1 + (inh - fbh) / stride,
+                                 1 + (inw - fbw) / stride,
+                                 fbn)
 
-    assert arr_out.dtype == arr_in.dtype
-    assert arr_out.shape == out_shape
+    # -- reshape arr_in
+    arr_inr = view_as_windows(arr_in, (fbh, fbw, fbd))[::stride, ::stride]
+    outh, outw = arr_inr.shape[:2]
+    arr_inrm = arr_inr.reshape(outh * outw, -1)
 
-    # -- Correlate !
-    for di in xrange(fbn):
-        filt = arr_fb[..., di]
-        arr_out[..., di] = correlate(arr_in, filt, mode='valid')
+    # -- reshape arr_fb
+    arr_fbm = arr_fb.reshape((fbh * fbw * fbd, fbn))
+
+    # -- correlate !
+    arr_out = np.dot(arr_inrm, arr_fbm)
+    arr_out = arr_out.reshape(outh, outw, -1)
+
+    assert arr_out.dtype == arr_in.dtype  # XXX: should go away
 
     return arr_out
+
+
+try:
+    fbcorr3 = profile(fbcorr3)
+except NameError:
+    pass

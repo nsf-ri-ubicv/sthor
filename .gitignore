@@ -1,4 +1,7 @@
+build
 *.pyc
 *.egg-info
 ~*
 *~
+*swp
+*.c
