@@ -1,106 +1,69 @@
-"""
-Local Pooling Operation.
-
-Easy-to-understand (but slow) naive numpy implementation.
-"""
+"""Local Pooling Operations"""
 
 # Authors: Nicolas Pinto <nicolas.pinto@gmail.com>
+#          Nicolas Poilvert <nicolas.poilvert@gmail.com>
 #
-# License: Proprietary
+# License: BSD
 
-__all__ = ['LPoolScipyNaive']
+__all__ = ['lpool3']
 
-# -- Imports
 import numpy as np
-from pythor3.operation.common.lsum import lsum
-from pythor3.operation.lpool_.plugins import LPoolPlugin
+from skimage.util.shape import view_as_windows
 
-# -- Default parameters
-from pythor3.operation.lpool_ import DEFAULT_KER_SHAPE
+import numexpr as ne
+if not ne.use_vml:
+    import warnings
+    warnings.warn("numexpr is NOT using Intel VML!")
 
-# -- Contracts
-from pythor3.operation.lpool_ import (
-    assert_preconditions_on_data,
-    assert_postconditions_on_properties,
-    assert_postconditions_on_data)
+# --
+DEFAULT_STRIDE = 1
+DEFAULT_ORDER = 1.0
 
 
-class LPoolScipyNaive(LPoolPlugin):
+def lpool3(arr_in, neighborhood,
+           order=DEFAULT_ORDER,
+           stride=DEFAULT_STRIDE, arr_out=None):
+    """3D Local Pooling Operation
 
-    def _get_tmp_shape(self, arr_in,
-                       ker_shape=DEFAULT_KER_SHAPE,
-                      ):
-        """XXX: docstring"""
-        in_h, in_w = arr_in.shape[:2]
-        tmp_h = in_h - ker_shape[0] + 1
-        tmp_w = in_w - ker_shape[1] + 1
-        if arr_in.ndim == 3:
-            in_d = arr_in.shape[2]
-            tmp_d = in_d
-            tmp_shape = tmp_h, tmp_w, tmp_d
-        else:
-            tmp_shape = tmp_h, tmp_w
-        return tmp_shape
+    XXX: docstring
+    """
+    assert arr_in.ndim == 3
+    assert len(neighborhood) == 2
 
-    def run(self):
-        """XXX: doctring"""
+    order = np.array([order], dtype=arr_in.dtype)
+    stride = np.int(stride)
 
-        tmp_shape = self._get_tmp_shape(self.arr_in, ker_shape=self.ker_shape)
-        self.arr_tmp = np.atleast_3d(np.empty(tmp_shape, self.arr_in.dtype))
+    inh, inw, ind = arr_in.shape
+    nbh, nbw = neighborhood
+    assert nbh <= inh
+    assert nbw <= inw
 
-        # input array
-        arr_in = self.arr_in
-        if arr_in.ndim == 2:
-            _arr_in = arr_in[:, :, None]
-        else:
-            _arr_in = arr_in[:]
-        in_h, in_w, in_d = _arr_in.shape
-        assert_preconditions_on_data(arr_in)
+    if arr_out is not None:
+        assert arr_out.dtype == arr_in.dtype
+        assert arr_out.shape == (1 + (inh - nbh) / stride,
+                                 1 + (inw - nbw) / stride,
+                                 ind)
 
-        dtype = self.arr_in.dtype
+    _arr_out = ne.evaluate('arr_in ** order')
+    _arr_out = view_as_windows(_arr_out, (1, nbw, 1))
+    _arr_out = ne.evaluate('sum(_arr_out, 4)')[:, ::stride, :, 0, 0]
+    _arr_out = view_as_windows(_arr_out, (nbh, 1, 1))
+    _arr_out = ne.evaluate('sum(_arr_out, 3)')[::stride, :, :, 0, 0]
+    # Note that you need to use '1' and not '1.0' so that the dtype of
+    # the exponent does not change (i.e. get promoted)
+    _arr_out = ne.evaluate('_arr_out ** (1 / order)')
 
-        # output array
-        arr_out = self.arr_out
-        if arr_in.ndim == 2:
-            _arr_out = arr_out[:, :, None]
-        else:
-            _arr_out = arr_out[:]
-
-        # temporary array
-        arr_tmp = self.arr_tmp
-
-        # operation parameters
-        ker_shape = self.ker_shape
-        order = self.order
-        stride = self.stride
-
-        # -- get input data
-        src = _arr_in[:]
-
-        # -- power
-        if order != 1:
-            src = src.astype(np.float64) ** order
-            src = src.astype(np.float32)
-
-        # -- local sum
-        for di in xrange(in_d):
-            slice2d = lsum(src[:, :, di], ker_shape, mode='valid')
-            arr_tmp[:, :, di] = slice2d.astype(dtype)
-
-        # -- root
-        if order != 1:
-            arr_tmp[arr_tmp < 0] = 0
-            arr_tmp = arr_tmp ** (1. / order)
-
-        # -- output
-        _arr_out = arr_tmp[::stride, ::stride]
-        if arr_in.ndim == 2:
-            _arr_out = _arr_out[:, :, 0]
-
-        # -- Contracts: postconditions
-        assert_postconditions_on_properties(arr_in, _arr_out, ker_shape, stride)
-        assert_postconditions_on_data(_arr_out)
-
+    if arr_out is not None:
         arr_out[:] = _arr_out
+    else:
+        arr_out = _arr_out
 
-        return arr_out
+    assert arr_out.dtype == arr_in.dtype
+
+    return arr_out
+
+try:
+    lpool3 = profile(lpool3)
+except NameError:
+    pass
+
