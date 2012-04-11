@@ -10,7 +10,6 @@ __all__ = ['lcdnorm3']
 import numpy as np
 
 from skimage.util.shape import view_as_windows
-from sthor.util.pad import pad
 
 EPSILON = 1e-4
 DEFAULT_STRIDE = 1
@@ -21,8 +20,6 @@ DEFAULT_DIVISIVE = True
 
 
 def lcdnorm3(arr_in, neighborhood,
-             mode='valid',
-             pad_val=0.,
              contrast=DEFAULT_CONTRAST,
              divisive=DEFAULT_DIVISIVE,
              stretch=DEFAULT_STRETCH,
@@ -39,16 +36,6 @@ def lcdnorm3(arr_in, neighborhood,
     assert isinstance(divisive, bool)
     assert contrast or divisive
 
-    # -- mode check
-    supported_modes = ['valid', 'same']
-    if mode.lower() not in supported_modes:
-        raise ValueError('mode "%s" not supported' % mode)
-
-    # -- if mode == 'same', we pad the tensor with a
-    #    constant value along the first two directions
-    if mode.lower() == 'same':
-        arr_in = pad(arr_in, neighborhood, pad_val)
-
     inh, inw, ind = arr_in.shape
 
     nbh, nbw = neighborhood
@@ -59,14 +46,17 @@ def lcdnorm3(arr_in, neighborhood,
 
     if arr_out is not None:
         assert arr_out.dtype == arr_in.dtype
-        assert arr_out.shape == (inh - nbh + 1, inw - nbw + 1, ind)
+        assert arr_out.shape == (1 + (inh - nbh) / stride,
+                                 1 + (inw - nbw) / stride,
+                                 ind)
 
     # -- prepare arr_out
     lys = nbh / 2
     lxs = nbw / 2
     rys = (nbh - 1) / 2
     rxs = (nbw - 1) / 2
-    _arr_out = arr_in[lys:inh-rys, lxs:inw-rxs]
+    _arr_out = arr_in[lys:inh-rys, lxs:inw-rxs][::stride, ::stride]
+
 
     # -- Contrast Normalization
     if contrast:
