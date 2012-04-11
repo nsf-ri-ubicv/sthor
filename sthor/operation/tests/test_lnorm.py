@@ -99,3 +99,57 @@ def test_lena_npy_array_non_C_contiguous():
     arr_out = lcdnorm3(arr_in, neighborhood)
     gv = arr_out[idx]
     assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
+
+
+def test_stride():
+
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    neighborhood = (4, 3)
+
+    arr_out = lcdnorm3(arr_in, neighborhood, stride=2)
+    assert arr_out.shape == (1, 1, 3)
+
+
+def test_stride_with_arr_out():
+
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    neighborhood = (4, 3)
+    arr_out = np.empty((1, 1, 3)).astype(DTYPE)
+
+    arr_out = lcdnorm3(arr_in, neighborhood, stride=2)
+    assert arr_out.shape == (1, 1, 3)
+
+
+def test_max_neighborhood_size():
+
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    neighborhood = (4, 3)
+
+    arr_out = lcdnorm3(arr_in, neighborhood)
+    assert arr_out.shape == (1, 2, 3)
+
+
+def test_max_neighborhood_sizei_with_arr_out():
+
+    arr_in = np.arange(4*4*3).reshape((4, 4, 3)).astype(DTYPE)
+    neighborhood = (4, 3)
+    arr_out = np.empty((1, 2, 3)).astype(DTYPE)
+
+    arr_out = lcdnorm3(arr_in, neighborhood, arr_out=arr_out)
+
+
+def test_smoke_max_neighborhood_size():
+
+    np.random.seed(42)
+
+    arr_in = np.random.randn(4, 4, 3).astype(DTYPE)
+    neighborhood = (4, 3)
+
+    arr_out = lcdnorm3(arr_in, neighborhood)
+
+    idx = (0, 1, 2)
+    ref = 0.0123399
+
+    res = arr_out[idx]
+
+    assert (ref - res) < ATOL
