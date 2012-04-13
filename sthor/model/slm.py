@@ -34,13 +34,87 @@ class SequentialLayeredModel(object):
         except NameError:
             pass
 
-    def process(self, arr_in):
+    def get_n_layers(self):
+
+        if not hasattr(self, '_n_layers'):
+
+            nlayers = len(self.description)
+            self._n_layers = nlayers
+            return self._n_layers
+
+        else:
+
+            return self._n_layers
+
+    def get_ops_nbh_nbw_stride(self):
+
+        if not hasattr(self, '_ops_nbh_nbw_stride'):
+
+            to_return = []
+
+            for layer in self.description:
+                for operation in layer:
+
+                    if operation[0] == 'lnorm':
+                        nbh, nbw = operation[1]['kwargs']['inker_shape']
+                        to_return += [('lnorm', nbh, nbw, 1)]
+
+                    elif operation[0] == 'fbcorr':
+                        nbh, nbw = operation[1]['initialize']['filter_shape']
+                        to_return += [('fbcorr', nbh, nbw, 1)]
+
+                    else:
+                        nbh, nbw = operation[1]['kwargs']['ker_shape']
+                        striding = operation[1]['kwargs']['stride']
+                        to_return += [('lpool', nbh, nbw, striding)]
+
+            self._ops_nbh_nbw_stride = to_return
+            return self._ops_nbh_nbw_stride
+
+        else:
+
+            return self._ops_nbh_nbw_stride
+
+    def get_receptive_field_shape(self):
+
+        if not hasattr(self, '_receptive_field_shape'):
+
+            ops_param = self.get_ops_nbh_nbw_stride()
+
+            # -- in this case the SLM does nothing so
+            #    it is the identity
+            if len(ops_param) == 0:
+                self._receptive_field_shape = (1, 1)
+                return self._receptive_field_shape
+
+            # -- otherwise we processed the image with some
+            #    operations and we go backwards to estimate
+            #    the global receptive field of the SLM
+            else:
+                # -- we start from a single pixel-wide shape
+                out_h, out_w = 1, 1
+
+                # -- then we compute what was the shape before
+                #    we applied the preceding operation
+                for _, nbh, nbw, s in reversed(ops_param):
+                    in_h = (out_h - 1) * s + nbh
+                    in_w = (out_w - 1) * s + nbw
+                    out_h, out_w = in_h, in_w
+                self._receptive_field_shape = (out_h, out_w)
+                return self._receptive_field_shape
+
+        else:
+
+            return self._receptive_field_shape
+
+    def process(self, arr_in, with_aprons=True,
+                process_whole_image=False):
         """XXX: docstring for process"""
 
         description = self.description
-
-        assert arr_in.shape == self.in_shape
         input_shape = arr_in.shape
+
+        assert input_shape[:2] == self.in_shape
         assert len(input_shape) == 2 or len(input_shape) == 3
 
         if len(input_shape) == 3:
@@ -49,6 +123,13 @@ class SequentialLayeredModel(object):
             tmp_out = arr_in[..., np.newaxis]
         else:
             raise ValueError("The input array should be 2D or 3D")
+
+        # -- first we initialize a list of 3-tuple
+        h, w = tmp_out.shape[:2]
+        Y, X = np.mgrid[:h, :w]
+        maps = [(tmp_out, X, Y)]
+
+        nbh_nbw_stride_l = self.get_ops_nbh_nbw_stride()
 
         for layer_idx, layer_desc in enumerate(description):
 
@@ -148,174 +229,3 @@ class SequentialLayeredModel(object):
                 assert tmp_out.dtype == np.float32
 
         return tmp_out
-
-
-def main():
-
-    import genson
-    from os import path
-    from numpy.testing import assert_allclose
-    from sthor.util.testing import assert_allclose_round
-    #from pythor3.utils.testing import assert_allclose_round
-    #from thoreano.slm import TheanoSLM
-
-    mypath = path.dirname(__file__)
-
-    RTOL = 1e-2
-    ATOL = 1e-4
-
-    # -- Raise exceptions on floating-point errors
-    np.seterr(all='raise')
-
-    gt_time = 0
-    gv_time = 0
-
-    iter = 0
-    while True:
-        with open(path.join(mypath, 'plos09.gson')) as fin:
-            gen = genson.loads(fin.read())
-
-        desc = gen.next()
-        genson.default_random_seed = 1
-
-        ## -- L3 1st
-        #desc = [
-            #[('lnorm',
-              #{'kwargs': {'inker_shape': [9, 9],
-                          #'outker_shape': [9, 9],
-                          #'remove_mean': False,
-                          #'stretch': 10,
-                          #'threshold': 1}})],
-            #[('fbcorr',
-              ##{'initialize': ['426b269c1bfeec366992218fb6e0cb5252cd7f69',
-                              ##(64, 3, 3)],
-              #{'initialize': {'filter_shape': (3, 3),
-                              #'generate': ('random:uniform', {'rseed': 42}),
-                              #'n_filters': 64},
-               #'kwargs': {'max_out': None, 'min_out': 0}}),
-             #('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 1, 'stride': 2}}),
-             #('lnorm',
-              #{'kwargs': {'inker_shape': [5, 5],
-                          #'outker_shape': [5, 5],
-                          #'remove_mean': False,
-                          #'stretch': 0.10000000000000001,
-                          #'threshold': 1}})],
-            #[('fbcorr',
-              ##{'initialize': ['9f1a2ad385682d076a7feacd923e50c330df4e29',
-                              ##(128, 5, 5, 64)],
-              #{'initialize': {'filter_shape': (5, 5),
-                              #'generate': ('random:uniform', {'rseed': 42}),
-                              #'n_filters': 128},
-               #'kwargs': {'max_out': None, 'min_out': 0}}),
-             #('lpool', {'kwargs': {'ker_shape': [5, 5], 'order': 1, 'stride': 2}}),
-             #('lnorm',
-              #{'kwargs': {'inker_shape': [7, 7],
-                          #'outker_shape': [7, 7],
-                          #'remove_mean': False,
-                          #'stretch': 1,
-                          #'threshold': 1}})],
-            #[('fbcorr',
-              ##{'initialize': ['d79b5af0732b177b2a9170288ba8f73727b56354',
-                              ##(256, 5, 5, 128)],
-              #{'initialize': {'filter_shape': (5, 5),
-                              #'generate': ('random:uniform', {'rseed': 42}),
-                              #'n_filters': 256},
-               #'kwargs': {'max_out': None, 'min_out': 0}}),
-             #('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}}),
-             #('lnorm',
-              #{'kwargs': {'inker_shape': [3, 3],
-                          #'outker_shape': [3, 3],
-                          #'remove_mean': False,
-                          #'stretch': 10,
-                          #'threshold': 1}})]
-        #]
-
-        in_shape = 200, 200, 1
-
-        from pythor3 import model
-        print 'create gt slm'
-        try:
-            slm_gt = model.slm.SequentialLayeredModel(
-                in_shape, desc,
-                plugin='passthrough',
-                plugin_kwargs={
-                    'plugin_mapping':{
-                        'all':{
-                            #'plugin':'scipy_naive',
-                            #'plugin_kwargs': {},
-                            'plugin':'cthor',
-                            #'plugin_kwargs': {'variant': 'icc:sse:tbb'},
-                            'plugin_kwargs': {'variant': 'sse:tbb'},
-                        }
-                    }
-                })
-        except ValueError, err:
-            print err
-            continue
-
-        print 'create gv slm'
-        slm_gv = SequentialLayeredModel(in_shape, desc)
-        #slm_gt = TheanoSLM((200, 200, 1), desc)
-        #slm_gv = TheanoSLM((200, 200, 1), desc)
-
-        #from scipy import misc
-        #a = misc.lena()
-        #a = misc.imresize(a, (200, 200)) / 1.0
-        #a.shape = a.shape[:2] + (1,)
-        #a -= a.min()
-        #a /= a.max()
-        #a = a.astype('f')
-
-        #print a.dtype
-        #raise
-        a = np.random.randn(200, 200, 1).astype('f')
-        a -= a.min()
-        a /= a.max()
-        a = a.astype('f')
-
-        import time
-        W = 2
-        for i in xrange(W):
-            slm_gt.process(a)
-            slm_gv.process(a.astype(DTYPE))
-
-        N = 10
-        for i in xrange(N):
-            iter += 1
-            print 'iter', iter
-            np.random.seed(iter)
-            #np.random.seed(20)
-            a = np.random.randn(200, 200, 1).astype('f')
-            a -= a.min()
-            a /= a.max()
-            a = a.astype('f')
-
-            #print 'a.mean()', a.mean()
-            #print 'np.linalg.norm(a)', np.linalg.norm(a)
-
-            x = a.copy()
-            start = time.time()
-            gt = slm_gt.process(x)
-            gt_time += time.time() - start
-
-            x = a.copy()
-            start = time.time()
-            gv = slm_gv.process(x.astype(DTYPE))
-            gv_time += time.time() - start
-
-            print 'norm', np.linalg.norm(gv - gt)
-            print 'abs max', np.absolute(gv - gt).max()
-            tmp = np.absolute(gv - gt)
-            print tmp.ravel().argmax()
-            print gv[tmp == tmp.max()]
-            print gt[tmp == tmp.max()]
-            #assert np.absolute(gv - gt).max() < 1e-3
-            #assert_allclose_round(gv, gt, rtol=RTOL, atol=ATOL)
-            #assert_allclose(gv, gt, rtol=RTOL, atol=ATOL)
-
-        #print 'gv fps', N / gv_time
-        #print 'gt fps', N / gt_time
-        print 'speedup', gt_time / gv_time
-
-if __name__ == '__main__':
-    main()
