@@ -5,7 +5,7 @@ Test suite for ```slm_dev```
 """
 
 import numpy as np
-from sthor.model.slm_dev import SequentialLayeredModel
+from sthor.model.slm import SequentialLayeredModel
 
 L3_first_desc = [
     [('lnorm',
@@ -58,9 +58,9 @@ def test_no_description():
     desc = []
     slm = SequentialLayeredModel(in_shape, desc)
 
-    assert slm.get_n_layers() == 0
-    assert slm.get_ops_nbh_nbw_stride() == []
-    assert slm.get_receptive_field_shape() == (1, 1)
+    assert slm.n_layers == 0
+    assert slm.ops_nbh_nbw_stride == []
+    assert slm.receptive_field_shape == (1, 1)
 
 
 def test_L3_first_desc():
@@ -69,18 +69,18 @@ def test_L3_first_desc():
     desc = L3_first_desc
     slm = SequentialLayeredModel(in_shape, desc)
 
-    assert slm.get_n_layers() == 4
-    assert slm.get_ops_nbh_nbw_stride() == [('lnorm', 9, 9, 1),
-                                            ('fbcorr', 3, 3, 1),
-                                            ('lpool', 7, 7, 2),
-                                            ('lnorm', 5, 5, 1),
-                                            ('fbcorr', 5, 5, 1),
-                                            ('lpool', 5, 5, 2),
-                                            ('lnorm', 7, 7, 1),
-                                            ('fbcorr', 5, 5, 1),
-                                            ('lpool', 7, 7, 2),
-                                            ('lnorm', 3, 3, 1)]
-    assert slm.get_receptive_field_shape() == (121, 121)
+    assert slm.n_layers == 4
+    assert slm.ops_nbh_nbw_stride == [('lnorm', 9, 9, 1),
+                                      ('fbcorr', 3, 3, 1),
+                                      ('lpool', 7, 7, 2),
+                                      ('lnorm', 5, 5, 1),
+                                      ('fbcorr', 5, 5, 1),
+                                      ('lpool', 5, 5, 2),
+                                      ('lnorm', 7, 7, 1),
+                                      ('fbcorr', 5, 5, 1),
+                                      ('lpool', 7, 7, 2),
+                                      ('lnorm', 3, 3, 1)]
+    assert slm.receptive_field_shape == (121, 121)
 
 
 def test_null_image_same_size_as_receptive_field():

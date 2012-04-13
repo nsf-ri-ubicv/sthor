@@ -16,6 +16,60 @@ from pprint import pprint
 
 DTYPE = np.float32
 
+# ----------------
+# Helper functions
+# ----------------
+
+def _get_ops_nbh_nbw_stride(description):
+
+    to_return = []
+
+    for layer in description:
+        for operation in layer:
+
+            if operation[0] == 'lnorm':
+                nbh, nbw = operation[1]['kwargs']['inker_shape']
+                to_return += [('lnorm', nbh, nbw, 1)]
+
+            elif operation[0] == 'fbcorr':
+                nbh, nbw = operation[1]['initialize']['filter_shape']
+                to_return += [('fbcorr', nbh, nbw, 1)]
+
+            else:
+                nbh, nbw = operation[1]['kwargs']['ker_shape']
+                striding = operation[1]['kwargs']['stride']
+                to_return += [('lpool', nbh, nbw, striding)]
+
+    return to_return
+
+
+def _get_receptive_field_shape(description):
+
+    ops_param = _get_ops_nbh_nbw_stride(description)
+
+    # -- in this case the SLM does nothing so
+    #    it is the identity
+    if len(ops_param) == 0:
+        return (1, 1)
+
+    # -- otherwise we processed the image with some
+    #    operations and we go backwards to estimate
+    #    the global receptive field of the SLM
+    else:
+        # -- we start from a single pixel-wide shape
+        out_h, out_w = 1, 1
+
+        # -- then we compute what was the shape before
+        #    we applied the preceding operation
+        for _, nbh, nbw, s in reversed(ops_param):
+            in_h = (out_h - 1) * s + nbh
+            in_w = (out_w - 1) * s + nbw
+            out_h, out_w = in_h, in_w
+        return (out_h, out_w)
+
+# --------------
+# SLM base class
+# --------------
 
 class SequentialLayeredModel(object):
 
@@ -24,88 +78,20 @@ class SequentialLayeredModel(object):
 
         pprint(description)
         self.description = description
+        self.n_layers = len(description)
 
         self.in_shape = in_shape
 
         self.filterbanks = {}
+
+        self.ops_nbh_nbw_stride = _get_ops_nbh_nbw_stride(description)
+        self.receptive_field_shape = _get_receptive_field_shape(description)
 
         try:
             self.process = profile(self.process)
         except NameError:
             pass
 
-    def get_n_layers(self):
-
-        if not hasattr(self, '_n_layers'):
-
-            nlayers = len(self.description)
-            self._n_layers = nlayers
-            return self._n_layers
-
-        else:
-
-            return self._n_layers
-
-    def get_ops_nbh_nbw_stride(self):
-
-        if not hasattr(self, '_ops_nbh_nbw_stride'):
-
-            to_return = []
-
-            for layer in self.description:
-                for operation in layer:
-
-                    if operation[0] == 'lnorm':
-                        nbh, nbw = operation[1]['kwargs']['inker_shape']
-                        to_return += [('lnorm', nbh, nbw, 1)]
-
-                    elif operation[0] == 'fbcorr':
-                        nbh, nbw = operation[1]['initialize']['filter_shape']
-                        to_return += [('fbcorr', nbh, nbw, 1)]
-
-                    else:
-                        nbh, nbw = operation[1]['kwargs']['ker_shape']
-                        striding = operation[1]['kwargs']['stride']
-                        to_return += [('lpool', nbh, nbw, striding)]
-
-            self._ops_nbh_nbw_stride = to_return
-            return self._ops_nbh_nbw_stride
-
-        else:
-
-            return self._ops_nbh_nbw_stride
-
-    def get_receptive_field_shape(self):
-
-        if not hasattr(self, '_receptive_field_shape'):
-
-            ops_param = self.get_ops_nbh_nbw_stride()
-
-            # -- in this case the SLM does nothing so
-            #    it is the identity
-            if len(ops_param) == 0:
-                self._receptive_field_shape = (1, 1)
-                return self._receptive_field_shape
-
-            # -- otherwise we processed the image with some
-            #    operations and we go backwards to estimate
-            #    the global receptive field of the SLM
-            else:
-                # -- we start from a single pixel-wide shape
-                out_h, out_w = 1, 1
-
-                # -- then we compute what was the shape before
-                #    we applied the preceding operation
-                for _, nbh, nbw, s in reversed(ops_param):
-                    in_h = (out_h - 1) * s + nbh
-                    in_w = (out_w - 1) * s + nbw
-                    out_h, out_w = in_h, in_w
-                self._receptive_field_shape = (out_h, out_w)
-                return self._receptive_field_shape
-
-        else:
-
-            return self._receptive_field_shape
 
     def process(self, arr_in, with_aprons=True,
                 process_whole_image=False):
@@ -129,7 +115,7 @@ class SequentialLayeredModel(object):
         Y, X = np.mgrid[:h, :w]
         maps = [(tmp_out, X, Y)]
 
-        nbh_nbw_stride_l = self.get_ops_nbh_nbw_stride()
+        nbh_nbw_stride_l = self.ops_nbh_nbw_stride
 
         for layer_idx, layer_desc in enumerate(description):
 
