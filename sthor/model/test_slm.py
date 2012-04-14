@@ -89,9 +89,65 @@ def test_null_image_same_size_as_receptive_field():
     desc = L3_first_desc
     slm = SequentialLayeredModel(in_shape, desc)
 
-    img = np.zeros((121, 121)).astype('f')
+    img = np.zeros(in_shape).astype('f')
 
     features = slm.process(img)
 
     assert features.shape == (1, 1, 256)
+    assert features.sum() == 0.
+
+
+def test_zero_input_image_no_pad_no_interleave():
+
+    in_shape = 200, 200
+    desc = L3_first_desc
+    slm = SequentialLayeredModel(in_shape, desc)
+
+    img = np.zeros(in_shape).astype('f')
+
+    features = slm.process(img, pad_apron=False, interleave_stride=False)
+
+    assert features.shape == (10, 10, 256)
+    assert features.sum() == 0.
+
+
+def test_zero_input_image_with_pad_no_interleave():
+
+    in_shape = 200, 200
+    desc = L3_first_desc
+    slm = SequentialLayeredModel(in_shape, desc)
+
+    img = np.zeros(in_shape).astype('f')
+
+    features = slm.process(img, pad_apron=True, interleave_stride=False)
+
+    assert features.shape == (25, 25, 256)
+    assert features.sum() == 0.
+
+
+def test_zero_input_image_no_pad_with_interleave():
+
+    in_shape = 200, 200
+    desc = L3_first_desc
+    slm = SequentialLayeredModel(in_shape, desc)
+
+    img = np.zeros(in_shape).astype('f')
+
+    features = slm.process(img, pad_apron=False, interleave_stride=True)
+
+    assert features.shape == (80, 80, 256)
+    assert features.sum() == 0.
+
+
+def test_zero_input_image_with_pad_with_interleave():
+
+    in_shape = 200, 200
+    desc = L3_first_desc
+    slm = SequentialLayeredModel(in_shape, desc)
+
+    img = np.zeros(in_shape).astype('f')
+
+    features = slm.process(img, pad_apron=True, interleave_stride=True)
+
+    assert features.shape == (200, 200, 256)
     assert features.sum() == 0.

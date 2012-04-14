@@ -7,10 +7,13 @@
 
 import numpy as np
 import numexpr as ne
+from skimage.util.shape import view_as_windows
 
 from sthor.operation import lcdnorm3
 from sthor.operation import fbcorr3
 from sthor.operation import lpool3
+
+from sthor.util.pad import filter_pad2d
 
 from pprint import pprint
 
@@ -93,10 +96,12 @@ class SequentialLayeredModel(object):
             pass
 
 
-    def process(self, arr_in, with_aprons=True,
-                process_whole_image=False):
+    def process(self, arr_in,
+                pad_apron=False,
+                interleave_stride=False):
         """XXX: docstring for process"""
 
+        rcpt_field = self.receptive_field_shape
         description = self.description
         input_shape = arr_in.shape
 
@@ -110,108 +115,242 @@ class SequentialLayeredModel(object):
         else:
             raise ValueError("The input array should be 2D or 3D")
 
-        # -- first we initialize a list of 3-tuple
-        h, w = tmp_out.shape[:2]
+        # -- first we initialize some variables to be used in
+        #    the processing of the feature maps
+        h, w = self.in_shape
         Y, X = np.mgrid[:h, :w]
-        maps = [(tmp_out, X, Y)]
+
+        tmp_out_l = [(tmp_out, X, Y)]
 
         nbh_nbw_stride_l = self.ops_nbh_nbw_stride
 
+        # -- loop over all the SLM operations in order
+        op_counter = 0
+
         for layer_idx, layer_desc in enumerate(description):
-
             for op_idx, (op_name, op_params) in enumerate(layer_desc):
-
-                tmp_in = tmp_out
 
                 kwargs = op_params['kwargs']
 
-                if op_name == 'lnorm':
+                tmp_l = []
 
-                    inker_shape = kwargs['inker_shape']
-                    outker_shape = kwargs['outker_shape']
-                    remove_mean = kwargs['remove_mean']
-                    stretch = kwargs['stretch']
-                    threshold = kwargs['threshold']
+                _, nbh, nbw, stride = nbh_nbw_stride_l[op_counter]
 
-                    # SLM PLoS09 / FG11 constraints:
-                    assert inker_shape == outker_shape
+                for arr, X, Y in tmp_out_l:
+                    tmp_l += self._process_one_op(arr, X, Y,
+                                       layer_idx, op_idx, kwargs,
+                                       op_params,
+                                       op_name, nbh, nbw, stride,
+                                       pad_apron=pad_apron,
+                                       interleave_stride=interleave_stride)
 
-                    tmp_out = lcdnorm3(tmp_in, inker_shape,
-                                       contrast=remove_mean,
-                                       stretch=stretch,
-                                       threshold=threshold)
+                tmp_out_l = tmp_l
+                op_counter += 1
 
-                elif op_name == 'fbcorr':
+        # -- now we need to possibly interleave the arrays
+        #    in ``tmp_out_l``
+        if interleave_stride:
 
-                    max_out = kwargs['max_out']
-                    min_out = kwargs['min_out']
+            out_shape = (h, w, tmp_out_l[0][0].shape[-1])
+            arr_out = np.empty(out_shape, dtype=arr_in.dtype)
+            Y_ref, X_ref = np.mgrid[:h, :w]
+            Y_int, X_int = np.zeros((h, w), dtype=np.int), \
+                           np.zeros((h, w), dtype=np.int)
 
-                    fbkey = layer_idx, op_idx
-                    if fbkey not in self.filterbanks:
-                        initialize = op_params['initialize']
-                        if isinstance(initialize, np.ndarray):
-                            fb = initialize
-                            if len(fb.shape) == 3:
-                                fb = fb[..., np.newaxis]
-                        else:
-                            filter_shape = list(initialize['filter_shape'])
-                            generate = initialize['generate']
-                            n_filters = initialize['n_filters']
+            if pad_apron:
 
-                            fb_shape = [n_filters] + filter_shape + [tmp_in.shape[-1]]
+                for arr, Xc, Yc in tmp_out_l:
 
-                            # generate filterbank data
-                            method_name, method_kwargs = generate
-                            assert method_name == 'random:uniform'
+                    anchor_h, anchor_w = Yc[0, 0], Xc[0, 0]
+                    stride_h = Yc[1, 0] - Yc[0, 0]
+                    stride_w = Xc[0, 1] - Xc[0, 0]
 
-                            rseed = method_kwargs.get('rseed', None)
-                            rng = np.random.RandomState(rseed)
+                    arr_out[anchor_h::stride_h, anchor_w::stride_w, ...] = arr
+                    X_int[anchor_h::stride_h, anchor_w::stride_w] = Xc
+                    Y_int[anchor_h::stride_h, anchor_w::stride_w] = Yc
 
-                            fb = rng.uniform(size=fb_shape)
+                assert (X_int == X_ref).all()
+                assert (Y_int == Y_ref).all()
 
-                            for fidx in xrange(n_filters):
-                                filt = fb[fidx]
-                                # zero-mean, unit-l2norm
-                                filt -= filt.mean()
-                                filt_norm = np.linalg.norm(filt)
-                                assert filt_norm != 0
-                                filt /= filt_norm
-                                fb[fidx] = filt
+                return arr_out
 
-                        fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
-                        self.filterbanks[fbkey] = fb
-                        print fb.shape
+            else:
 
-                    fb = self.filterbanks[fbkey]
+                X_int = filter_pad2d(X_int[..., np.newaxis], rcpt_field,
+                                     reverse_padding=True).squeeze()
+                Y_int = filter_pad2d(Y_int[..., np.newaxis], rcpt_field,
+                                     reverse_padding=True).squeeze()
+                X_ref = filter_pad2d(X_ref[..., np.newaxis], rcpt_field,
+                                     reverse_padding=True).squeeze()
+                Y_ref = filter_pad2d(Y_ref[..., np.newaxis], rcpt_field,
+                                     reverse_padding=True).squeeze()
+                arr_out = filter_pad2d(arr_out, rcpt_field,
+                                       reverse_padding=True)
 
-                    # -- filter
-                    assert tmp_in.dtype == np.float32
-                    tmp_out = fbcorr3(tmp_in, fb)
+                offset_Y = Y_ref.min()
+                offset_X = X_ref.min()
 
-                    # -- activation
-                    min_out = -np.inf if min_out is None else min_out
-                    max_out = +np.inf if max_out is None else max_out
-                    # insure that the type is right before calling numexpr
-                    min_out = np.array([min_out], dtype=tmp_in.dtype)
-                    max_out = np.array([max_out], dtype=tmp_in.dtype)
-                    # call numexpr
-                    tmp_out = ne.evaluate('where(tmp_out < min_out, min_out, tmp_out)')
-                    tmp_out = ne.evaluate('where(tmp_out > max_out, max_out, tmp_out)')
-                    assert tmp_out.dtype == tmp_in.dtype
+                for arr, Xc, Yc in tmp_out_l:
+
+                    anchor_h, anchor_w = Yc[0, 0] - offset_Y, \
+                                         Xc[0, 0] - offset_X
+                    stride_h = Yc[1, 0] - Yc[0, 0]
+                    stride_w = Xc[0, 1] - Xc[0, 0]
+
+                    arr_out[anchor_h::stride_h, anchor_w::stride_w, ...] = arr
+                    X_int[anchor_h::stride_h, anchor_w::stride_w] = Xc
+                    Y_int[anchor_h::stride_h, anchor_w::stride_w] = Yc
+
+                assert (X_int == X_ref).all()
+                assert (Y_int == Y_ref).all()
+
+                return arr_out
+
+        else:
+
+            assert len(tmp_out_l) == 1
+            arr_out, _, _ = tmp_out_l[0]
+
+            return arr_out
+
+    def _process_one_op(self, arr, X, Y,
+                        layer_idx, op_idx, kwargs,
+                        op_params,
+                        op_name, nbh, nbw, stride,
+                        pad_apron=False,
+                        interleave_stride=False):
+
+        out_l = []
+
+        # -- here we compute the pixel coordinates of
+        #    the central pixel in a patch
+        hc, wc = nbh / 2, nbw / 2
+
+        if pad_apron:
+
+            arr = filter_pad2d(arr, (nbh, nbw))
+            X = np.squeeze(filter_pad2d(X[..., np.newaxis], (nbh, nbw),
+                                        constant=-1))
+            Y = np.squeeze(filter_pad2d(Y[..., np.newaxis], (nbh, nbw),
+                                        constant=-1))
+
+        if interleave_stride:
+
+            for i in xrange(stride):
+                for j in xrange(stride):
+
+                    arr_out_ij = self._get_feature_map(arr[i::, j::, ...],
+                                                  layer_idx, op_idx, kwargs,
+                                                  op_params, op_name)
+                    X_out_ij = view_as_windows(X[i::, j::],
+                                               (nbh, nbw))[::stride, ::stride,
+                                                           hc, wc]
+                    Y_out_ij = view_as_windows(Y[i::, j::],
+                                               (nbh, nbw))[::stride, ::stride,
+                                                           hc, wc]
+                    out_l += [(arr_out_ij, X_out_ij, Y_out_ij)]
+        else:
+
+            arr_out = self._get_feature_map(arr, layer_idx, op_idx, kwargs,
+                                            op_params, op_name)
+            X_out = view_as_windows(X, (nbh, nbw))[::stride, ::stride, hc, wc]
+            Y_out = view_as_windows(Y, (nbh, nbw))[::stride, ::stride, hc, wc]
+            out_l += [(arr_out, X_out, Y_out)]
+
+        return out_l
 
 
-                elif op_name == 'lpool':
+    def _get_feature_map(self, tmp_in,
+                         layer_idx, op_idx, kwargs,
+                         op_params, op_name):
 
-                    ker_shape = kwargs['ker_shape']
-                    order = kwargs['order']
-                    stride = kwargs['stride']
+        if op_name == 'lnorm':
 
-                    tmp_out = lpool3(tmp_in, ker_shape, order=order, stride=stride)
+            inker_shape = kwargs['inker_shape']
+            outker_shape = kwargs['outker_shape']
+            remove_mean = kwargs['remove_mean']
+            stretch = kwargs['stretch']
+            threshold = kwargs['threshold']
 
+            # SLM PLoS09 / FG11 constraints:
+            assert inker_shape == outker_shape
+
+            tmp_out = lcdnorm3(tmp_in, inker_shape,
+                               contrast=remove_mean,
+                               stretch=stretch,
+                               threshold=threshold)
+
+        elif op_name == 'fbcorr':
+
+            max_out = kwargs['max_out']
+            min_out = kwargs['min_out']
+
+            fbkey = layer_idx, op_idx
+            if fbkey not in self.filterbanks:
+                initialize = op_params['initialize']
+                if isinstance(initialize, np.ndarray):
+                    fb = initialize
+                    if len(fb.shape) == 3:
+                        fb = fb[..., np.newaxis]
                 else:
-                    raise ValueError("operation '%s' not understood" % op_name)
+                    filter_shape = list(initialize['filter_shape'])
+                    generate = initialize['generate']
+                    n_filters = initialize['n_filters']
 
-                assert tmp_out.dtype == tmp_in.dtype
-                assert tmp_out.dtype == np.float32
+                    fb_shape = [n_filters] + filter_shape + [tmp_in.shape[-1]]
+
+                    # generate filterbank data
+                    method_name, method_kwargs = generate
+                    assert method_name == 'random:uniform'
+
+                    rseed = method_kwargs.get('rseed', None)
+                    rng = np.random.RandomState(rseed)
+
+                    fb = rng.uniform(size=fb_shape)
+
+                    for fidx in xrange(n_filters):
+                        filt = fb[fidx]
+                        # zero-mean, unit-l2norm
+                        filt -= filt.mean()
+                        filt_norm = np.linalg.norm(filt)
+                        assert filt_norm != 0
+                        filt /= filt_norm
+                        fb[fidx] = filt
+
+                fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
+                self.filterbanks[fbkey] = fb
+                print fb.shape
+
+            fb = self.filterbanks[fbkey]
+
+            # -- filter
+            assert tmp_in.dtype == np.float32
+            tmp_out = fbcorr3(tmp_in, fb)
+
+            # -- activation
+            min_out = -np.inf if min_out is None else min_out
+            max_out = +np.inf if max_out is None else max_out
+            # insure that the type is right before calling numexpr
+            min_out = np.array([min_out], dtype=tmp_in.dtype)
+            max_out = np.array([max_out], dtype=tmp_in.dtype)
+            # call numexpr
+            tmp_out = ne.evaluate('where(tmp_out < min_out, min_out, tmp_out)')
+            tmp_out = ne.evaluate('where(tmp_out > max_out, max_out, tmp_out)')
+            assert tmp_out.dtype == tmp_in.dtype
+
+
+        elif op_name == 'lpool':
+
+            ker_shape = kwargs['ker_shape']
+            order = kwargs['order']
+            stride = kwargs['stride']
+
+            tmp_out = lpool3(tmp_in, ker_shape, order=order, stride=stride)
+
+        else:
+            raise ValueError("operation '%s' not understood" % op_name)
+
+        assert tmp_out.dtype == tmp_in.dtype
+        assert tmp_out.dtype == np.float32
 
         return tmp_out
