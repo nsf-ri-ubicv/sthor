@@ -5,7 +5,10 @@ Test suite for ```slm_dev```
 """
 
 import numpy as np
+from numpy.testing import assert_allclose
 from sthor.model.slm import SequentialLayeredModel
+RTOL = 1e-5
+ATOL = 1e-6
 
 L3_first_desc = [
     [('lnorm',
@@ -151,3 +154,17 @@ def test_zero_input_image_with_pad_with_interleave():
 
     assert features.shape == (200, 200, 256)
     assert features.sum() == 0.
+
+
+def test_outout_with_interleave_and_stride_and_no_interleave():
+
+    in_shape = 200, 200
+    desc = L3_first_desc
+    slm = SequentialLayeredModel(in_shape, desc)
+
+    img = np.random.randn(200, 200).astype('f')
+
+    full_features = slm.process(img, pad_apron=True, interleave_stride=True)
+    features = slm.process(img, pad_apron=True, interleave_stride=False)
+
+    assert_allclose(features, full_features[::8, ::8], rtol=RTOL, atol=ATOL)
