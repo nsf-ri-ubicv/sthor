@@ -7,6 +7,8 @@
 
 import numpy as np
 import numexpr as ne
+import warnings
+
 from skimage.util.shape import view_as_windows
 
 from sthor.operation import lcdnorm3
@@ -96,10 +98,14 @@ class SequentialLayeredModel(object):
             pass
 
 
-    def process(self, arr_in,
-                pad_apron=False,
-                interleave_stride=False):
-        """XXX: docstring for process"""
+    def process(self, arr_in, pad_apron=False, interleave_stride=False):
+        warnings.warn("get_neurons is deprecated, please use imgd_to_neurons",
+                      DeprecationWarning, stacklevel=2)
+        return self.transform(arr_in, pad_apron=pad_apron, interleave_stride=interleave_stride)
+
+
+    def transform(self, arr_in, pad_apron=False, interleave_stride=False):
+        """XXX: docstring for transform"""
 
         rcpt_field = self.receptive_field_shape
         description = self.description
