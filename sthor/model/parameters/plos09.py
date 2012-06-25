@@ -84,3 +84,8 @@ plos09_l3_description_pyll = [
         ('lnorm', deepcopy(_lnorm)),
     ],
 ]
+
+
+def get_random_plos09_l3_description(rng=None):
+    desc = pyll.stochastic.sample(plos09_l3_description_pyll, rng=rng)
+    return desc
