@@ -8,6 +8,7 @@ fb = np.random.randn(512, 32, 32).astype('f')
 start = time.time()
 out = np.tensordot(view_as_windows(a, fb.shape[1:]), fb, axes=[(2, 3), (1, 2)])
 end = time.time()
+print out
 
 duration = end - start
 gflops = (np.prod(out.shape) * np.prod(fb.shape[1:]) * 2) / (1000**3.)
