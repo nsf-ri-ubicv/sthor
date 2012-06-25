@@ -11,5 +11,6 @@ end = time.time()
 
 duration = end - start
 gflops = (np.prod(out.shape) * np.prod(fb.shape[1:]) * 2) / (1000**3.)
+print gflops
 gflops_per_sec = gflops / duration
 print 'gflops/sec', gflops_per_sec
