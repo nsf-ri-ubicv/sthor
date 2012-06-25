@@ -2,6 +2,7 @@ import time
 import numpy as np
 from skimage.util.shape import view_as_windows
 
+np.random.seed(42)
 a = np.random.randn(512, 512).astype('f')
 fb = np.random.randn(512, 32, 32).astype('f')
 
