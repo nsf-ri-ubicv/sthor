@@ -6,6 +6,7 @@
 # License: BSD
 
 import numpy as np
+from arraypad import *
 
 
 def filter_pad2d(arr_in, filter_shape2d, constant=0,
