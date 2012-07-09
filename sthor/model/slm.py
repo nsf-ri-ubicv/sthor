@@ -99,7 +99,7 @@ class SequentialLayeredModel(object):
 
 
     def process(self, arr_in, pad_apron=False, interleave_stride=False):
-        warnings.warn("get_neurons is deprecated, please use imgd_to_neurons",
+        warnings.warn("process(...) is deprecated, please use transform(...)",
                       DeprecationWarning, stacklevel=2)
         return self.transform(arr_in, pad_apron=pad_apron, interleave_stride=interleave_stride)
 
