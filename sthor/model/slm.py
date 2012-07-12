@@ -48,30 +48,6 @@ def _get_ops_nbh_nbw_stride(description):
     return to_return
 
 
-def _get_receptive_field_shape(description):
-
-    ops_param = _get_ops_nbh_nbw_stride(description)
-
-    # -- in this case the SLM does nothing so
-    #    it is the identity
-    if len(ops_param) == 0:
-        return (1, 1)
-
-    # -- otherwise we processed the image with some
-    #    operations and we go backwards to estimate
-    #    the global receptive field of the SLM
-    else:
-        # -- we start from a single pixel-wide shape
-        out_h, out_w = 1, 1
-
-        # -- then we compute what was the shape before
-        #    we applied the preceding operation
-        for _, nbh, nbw, s in reversed(ops_param):
-            in_h = (out_h - 1) * s + nbh
-            in_w = (out_w - 1) * s + nbw
-            out_h, out_w = in_h, in_w
-        return (out_h, out_w)
-
 # --------------
 # SLM base class
 # --------------
@@ -90,7 +66,6 @@ class SequentialLayeredModel(object):
         self.filterbanks = {}
 
         self.ops_nbh_nbw_stride = _get_ops_nbh_nbw_stride(description)
-        self.receptive_field_shape = _get_receptive_field_shape(description)
 
         try:
             self.process = profile(self.process)
@@ -107,7 +82,7 @@ class SequentialLayeredModel(object):
     def transform(self, arr_in, pad_apron=False, interleave_stride=False):
         """XXX: docstring for transform"""
 
-        rcpt_field = self.receptive_field_shape
+        #rcpt_field = self.receptive_field_shape
         description = self.description
         input_shape = arr_in.shape
 
@@ -157,60 +132,47 @@ class SequentialLayeredModel(object):
         #    in ``tmp_out_l``
         if interleave_stride:
 
-            out_shape = (h, w, tmp_out_l[0][0].shape[-1])
+            Xc_min, Xc_max = [], []
+            Yc_min, Yc_max = [], []
+            for _, Xc, Yc in tmp_out_l:
+                Xc_min += [Xc.min()]
+                Xc_max += [Xc.max()]
+                Yc_min += [Yc.min()]
+                Yc_max += [Yc.max()]
+
+            Xc_min = np.array(Xc_min)
+            Xc_max = np.array(Xc_max)
+            Yc_min = np.array(Yc_min)
+            Yc_max = np.array(Yc_max)
+
+            offset_Y = Yc_min.min()
+            offset_X = Xc_min.min()
+
+            hf = Yc_max.max() - Yc_min.min() + 1
+            wf = Xc_max.max() - Xc_min.min() + 1
+            df = tmp_out_l[0][0].shape[-1]
+            out_shape = (hf, wf, df)
+
             arr_out = np.empty(out_shape, dtype=arr_in.dtype)
-            Y_ref, X_ref = np.mgrid[:h, :w]
-            Y_int, X_int = np.zeros((h, w), dtype=np.int), \
-                           np.zeros((h, w), dtype=np.int)
+            Y_ref, X_ref = np.mgrid[:hf, :wf]
+            Y_int, X_int = np.zeros((hf, wf), dtype=np.int), \
+                           np.zeros((hf, wf), dtype=np.int)
 
-            if pad_apron:
+            for arr, Xc, Yc in tmp_out_l:
 
-                for arr, Xc, Yc in tmp_out_l:
+                anchor_h, anchor_w = Yc[0, 0] - offset_Y, \
+                                     Xc[0, 0] - offset_X
+                stride_h = Yc[1, 0] - Yc[0, 0]
+                stride_w = Xc[0, 1] - Xc[0, 0]
 
-                    anchor_h, anchor_w = Yc[0, 0], Xc[0, 0]
-                    stride_h = Yc[1, 0] - Yc[0, 0]
-                    stride_w = Xc[0, 1] - Xc[0, 0]
+                arr_out[anchor_h::stride_h, anchor_w::stride_w] = arr
+                X_int[anchor_h::stride_h, anchor_w::stride_w] = Xc - offset_X
+                Y_int[anchor_h::stride_h, anchor_w::stride_w] = Yc - offset_Y
 
-                    arr_out[anchor_h::stride_h, anchor_w::stride_w, ...] = arr
-                    X_int[anchor_h::stride_h, anchor_w::stride_w] = Xc
-                    Y_int[anchor_h::stride_h, anchor_w::stride_w] = Yc
+            assert (X_int == X_ref).all()
+            assert (Y_int == Y_ref).all()
 
-                assert (X_int == X_ref).all()
-                assert (Y_int == Y_ref).all()
-
-                return arr_out
-
-            else:
-
-                X_int = filter_pad2d(X_int[..., np.newaxis], rcpt_field,
-                                     reverse_padding=True).squeeze()
-                Y_int = filter_pad2d(Y_int[..., np.newaxis], rcpt_field,
-                                     reverse_padding=True).squeeze()
-                X_ref = filter_pad2d(X_ref[..., np.newaxis], rcpt_field,
-                                     reverse_padding=True).squeeze()
-                Y_ref = filter_pad2d(Y_ref[..., np.newaxis], rcpt_field,
-                                     reverse_padding=True).squeeze()
-                arr_out = filter_pad2d(arr_out, rcpt_field,
-                                       reverse_padding=True)
-
-                offset_Y = Y_ref.min()
-                offset_X = X_ref.min()
-
-                for arr, Xc, Yc in tmp_out_l:
-
-                    anchor_h, anchor_w = Yc[0, 0] - offset_Y, \
-                                         Xc[0, 0] - offset_X
-                    stride_h = Yc[1, 0] - Yc[0, 0]
-                    stride_w = Xc[0, 1] - Xc[0, 0]
-
-                    arr_out[anchor_h::stride_h, anchor_w::stride_w, ...] = arr
-                    X_int[anchor_h::stride_h, anchor_w::stride_w] = Xc
-                    Y_int[anchor_h::stride_h, anchor_w::stride_w] = Yc
-
-                assert (X_int == X_ref).all()
-                assert (Y_int == Y_ref).all()
-
-                return arr_out
+            return arr_out
 
         else:
 
@@ -229,7 +191,8 @@ class SequentialLayeredModel(object):
         out_l = []
 
         # -- here we compute the pixel coordinates of
-        #    the central pixel in a patch
+        #    the central pixel in a patch. Note the convention
+        #    used here for the central pixel coordinates
         hc, wc = nbh / 2, nbw / 2
 
         if pad_apron:
