@@ -48,6 +48,125 @@ def _get_ops_nbh_nbw_stride(description):
     return to_return
 
 
+def _get_minimal_receptive_field_shape(description):
+    """
+    This function computes the ``minimal`` receptive field of the model.
+    """
+
+    ops_param = _get_ops_nbh_nbw_stride(description)
+
+    # -- in this case the SLM does nothing so
+    #    it is the identity
+    if len(ops_param) == 0:
+        return (1, 1)
+
+    # -- otherwise we processed the image with some
+    #    operations and we go backwards to estimate
+    #    the global receptive field of the SLM
+    else:
+        # -- we start from a single pixel-wide shape
+        out_h, out_w = 1, 1
+
+        # -- then we compute what was the shape before
+        #    we applied the preceding operation
+        for _, nbh, nbw, s in reversed(ops_param):
+            in_h = (out_h - 1) * s + nbh
+            in_w = (out_w - 1) * s + nbw
+            out_h, out_w = in_h, in_w
+        return (out_h, out_w)
+
+
+def _get_out_shape(in_shape, description, interleave_stride=True):
+    """
+    This function computes the final array shape after processing
+    of an input array of shape ``in_shape`` by the SLM model described
+    by ``description``
+    """
+
+    assert len(in_shape) == 2
+    h0, w0 = in_shape
+    assert h0 > 0
+    assert w0 > 0
+
+    ops_param = _get_ops_nbh_nbw_stride(description)
+
+    h_list = [(nh, s) for _, nh, _, s in ops_param]
+    w_list = [(nw, s) for _, _, nw, s in ops_param]
+
+    h_out = _compute_output_dimension(h0, h_list, interleave_stride=interleave_stride)
+    w_out = _compute_output_dimension(w0, w_list, interleave_stride=interleave_stride)
+
+    return (h_out, w_out)
+
+
+def _get_in_shape(out_shape, description, interleave_stride=True):
+    """
+    This function computes what should be the ``in_shape`` for which an array with
+    that latter shape would be mapped to an output array of shape ``out_shape``
+    In other words, this function allows one to compute the smallest possible input
+    shape that leads to an output array of shape as close as possible to ``out_shape``
+
+    Returns
+    -------
+
+    a list: first element is a boolean to indicate whether the process exactly converged
+            second element is the ``in_shape``
+            third element is the ``out_shape`` corresponding to the ``in_shape`` found
+    """
+
+    assert len(out_shape) == 2
+    ht, wt = out_shape
+    assert ht > 0
+    assert wt > 0
+
+    ops_param = _get_ops_nbh_nbw_stride(description)
+
+    h_list = [(nh, s) for _, nh, _, s in ops_param]
+    w_list = [(nw, s) for _, _, nw, s in ops_param]
+
+    h0 = ht
+    w0 = wt
+    h_out = _compute_output_dimension(h0, h_list, interleave_stride=interleave_stride)
+    w_out = _compute_output_dimension(w0, w_list, interleave_stride=interleave_stride)
+
+    while h_out < ht:
+        h0 += 1
+        h_out = _compute_output_dimension(h0, h_list, interleave_stride=interleave_stride)
+    while w_out < wt:
+        w0 += 1
+        w_out = _compute_output_dimension(w0, w_list, interleave_stride=interleave_stride)
+
+    success = False
+    if h_out == ht and w_out == wt:
+        success = True
+
+    return [success, (h0, w0), (h_out, w_out)]
+
+
+def _compute_output_dimension(h, h_list, interleave_stride=True):
+    """
+    This routine computes the output dimension given an input dimension and a list
+    of neighborhood sizes and strides for each operation in order (in that dimension)
+    """
+
+    liste = [h]
+
+    for nh, s in h_list:
+        new_liste = []
+        for l in liste:
+            arr = np.empty(l, dtype=np.bool)
+            rarr = view_as_windows(arr, (nh,))
+            if interleave_stride:
+                for i in xrange(s):
+                    new_liste += [rarr[i::s].shape[0]]
+            else:
+                new_liste += [rarr[0::s].shape[0]]
+        liste = new_liste
+
+    liste = np.array(liste)
+    return liste.sum()
+
+
 # --------------
 # SLM base class
 # --------------
@@ -60,6 +179,10 @@ class SequentialLayeredModel(object):
         pprint(description)
         self.description = description
         self.n_layers = len(description)
+        if len(description) <= 0:
+            self.n_features = 0
+        else:
+            self.n_features = int(description[-1][0][1]['initialize']['n_filters'])
 
         self.in_shape = in_shape
 
@@ -82,9 +205,13 @@ class SequentialLayeredModel(object):
     def transform(self, arr_in, pad_apron=False, interleave_stride=False):
         """XXX: docstring for transform"""
 
-        #rcpt_field = self.receptive_field_shape
         description = self.description
         input_shape = arr_in.shape
+
+        # just for later check on output array shape
+        if pad_apron == False:
+            output_shape = _get_out_shape(input_shape, description,
+                           interleave_stride=interleave_stride)
 
         assert input_shape[:2] == self.in_shape
         assert len(input_shape) == 2 or len(input_shape) == 3
@@ -172,12 +299,20 @@ class SequentialLayeredModel(object):
             assert (X_int == X_ref).all()
             assert (Y_int == Y_ref).all()
 
+            # check on output array shape
+            if pad_apron == False:
+                assert output_shape == arr_out.shape[:2]
+
             return arr_out
 
         else:
 
             assert len(tmp_out_l) == 1
             arr_out, _, _ = tmp_out_l[0]
+
+            # check on output array shape
+            if pad_apron == False:
+                assert output_shape == arr_out.shape[:2]
 
             return arr_out
 
