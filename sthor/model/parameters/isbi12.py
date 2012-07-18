@@ -68,7 +68,7 @@ if pyll_available:
     }
 
 
-    # --
+    # -- Layer 4
     isbi12_l4_description_pyll = [
         [
             ('lnorm', deepcopy(_lnorm)),
@@ -90,8 +90,100 @@ if pyll_available:
             ('lpool', deepcopy(_lpool)),
         ],
     ]
+    # -- Layer 3
+    isbi12_l3_description_pyll = [
+        [
+            ('lnorm', deepcopy(_lnorm)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr1)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr2)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr3)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+    ]
+    # -- Layer 2
+    isbi12_l2_description_pyll = [
+        [
+            ('lnorm', deepcopy(_lnorm)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr1)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr2)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+    ]
+    # -- Layer 4 (no lnorm)
+    isbi12_l4_no_lnorm_description_pyll = [
+        [
+            ('fbcorr', deepcopy(_fbcorr1)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr2)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr3)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr4)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+    ]
+    # -- Layer 3 (no lnorm)
+    isbi12_l3_no_lnorm_description_pyll = [
+        [
+            ('fbcorr', deepcopy(_fbcorr1)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr2)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr3)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+    ]
+    # -- Layer 2 (no lnorm)
+    isbi12_l2_no_lnorm_description_pyll = [
+        [
+            ('fbcorr', deepcopy(_fbcorr1)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+        [
+            ('fbcorr', deepcopy(_fbcorr2)),
+            ('lpool', deepcopy(_lpool)),
+        ],
+    ]
 
 
     def get_random_isbi12_l4_description(rng=None):
         desc = pyll.stochastic.sample(isbi12_l4_description_pyll, rng=rng)
+        return desc
+    def get_random_isbi12_l3_description(rng=None):
+        desc = pyll.stochastic.sample(isbi12_l3_description_pyll, rng=rng)
+        return desc
+    def get_random_isbi12_l2_description(rng=None):
+        desc = pyll.stochastic.sample(isbi12_l2_description_pyll, rng=rng)
+        return desc
+    def get_random_isbi12_l4_no_lnorm_description(rng=None):
+        desc = pyll.stochastic.sample(isbi12_l4_no_lnorm_description_pyll, rng=rng)
+        return desc
+    def get_random_isbi12_l3_no_lnorm_description(rng=None):
+        desc = pyll.stochastic.sample(isbi12_l3_no_lnorm_description_pyll, rng=rng)
+        return desc
+    def get_random_isbi12_l2_no_lnorm_description(rng=None):
+        desc = pyll.stochastic.sample(isbi12_l2_no_lnorm_description_pyll, rng=rng)
         return desc

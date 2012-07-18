@@ -213,7 +213,7 @@ class SequentialLayeredModel(object):
             output_shape = _get_out_shape(input_shape, description,
                            interleave_stride=interleave_stride)
 
-        assert input_shape[:2] == self.in_shape
+        #assert input_shape[:2] == self.in_shape
         assert len(input_shape) == 2 or len(input_shape) == 3
 
         if len(input_shape) == 3:
@@ -225,7 +225,7 @@ class SequentialLayeredModel(object):
 
         # -- first we initialize some variables to be used in
         #    the processing of the feature maps
-        h, w = self.in_shape
+        h, w = input_shape[:2]
         Y, X = np.mgrid[:h, :w]
 
         tmp_out_l = [(tmp_out, X, Y)]
