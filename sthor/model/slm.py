@@ -182,7 +182,11 @@ class SequentialLayeredModel(object):
         if len(description) <= 0:
             self.n_features = 0
         else:
-            self.n_features = int(description[-1][0][1]['initialize']['n_filters'])
+            for i in range(len(description[-1])):
+                if description[-1][i][0] == 'fbcorr':
+                    self.n_features = \
+                            int(description[-1][i][1]['initialize']['n_filters'])
+                    break
 
         self.in_shape = in_shape
 
