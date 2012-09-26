@@ -23,6 +23,7 @@ from pls import pls
 
 DTYPE = np.float32
 MAX_MEM_GB = 2.
+PARTITION_SIZE = 100
 N_PATCHES_P_IMG = 3
 PATCH_SAMPLE_SEED = 21
 
@@ -336,7 +337,7 @@ class HierarchicalGenDiscModel(object):
             else:
                 n_f_h, n_f_w = (1,1)
 
-            fb_shape = (n_f_h, n_f_w, n_f_out) + f_shape + (n_f_in,)
+            fb_shape = (n_f_h, n_f_w) + f_shape + (n_f_in, n_f_out)
             assert fb.shape == fb_shape
 
             self.filterbanks += [fb.copy()]
@@ -348,8 +349,6 @@ class HierarchicalGenDiscModel(object):
 
         [n_f_h_in, n_f_w_in, _, _, n_f_in, _] = \
                                          self.shape_stride_by_layer[layer_idx-1]
-
-        layer_in_shape = (n_f_h_in, n_f_w_in, n_f_in)
 
         slm_l_desc = self.slm_description[layer_idx]
         hgdm_l_desc = self.hgdm_description[layer_idx]
@@ -363,11 +362,13 @@ class HierarchicalGenDiscModel(object):
 
         if hgdm_l_arch == 'tied':
             n_f_h_out, n_f_w_out = (1,1)
-            rf_h, rf_w, rf_s = (layer_in_shape + (1,))
+            rf_h, rf_w, rf_s = (n_f_h_in, n_f_w_in, 1)
+            n_f_out = self.shape_stride_by_layer[layer_idx][4]
         elif hgdm_l_arch == 'tiled':
             [n_f_h_out, n_f_w_out, rf_h, rf_w, n_f_out, rf_s] = \
                                            self.shape_stride_by_layer[layer_idx]
-            assert n_f_out == n_filters
+
+        assert n_f_out == n_filters
 
         fb_shape = (n_f_h_out, n_f_w_out, n_filters) + f_shape
         fb = np.empty(fb_shape, dtype=DTYPE)
@@ -375,7 +376,7 @@ class HierarchicalGenDiscModel(object):
         if learn_algo != 'slm':
             arr_learn = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, 
                                  dtype=DTYPE)
-            y_learn = np.empty((n_imgs * N_PATCHES_P_IMG, 1), dtype=y.dtype)
+            y_learn = np.empty((n_imgs * N_PATCHES_P_IMG,), dtype=y.dtype)
 
             fb = np.empty(fb_shape, dtype=DTYPE)
 
@@ -405,7 +406,8 @@ class HierarchicalGenDiscModel(object):
                 else:
 
                     input_fnames, partitions = \
-                         self._get_neural_imgs_fnames(layer_idx, 'read', n_imgs)
+                         self._get_neural_imgs_fnames(layer_idx-1, 
+                                                      'read', n_imgs)
 
                     assert len(partitions) >= 1
 
@@ -418,8 +420,8 @@ class HierarchicalGenDiscModel(object):
                         arr_p = np.load(fname)
                         assert n_imgs_part == arr_p.shape[0]
 
-                        arr_rf = view_as_windows(arr_p, (1, 1, rf_h, rf_w, 
-                                                         layer_in_shape[2]))
+                        arr_rf = view_as_windows(arr_p, (1, 1, 
+                                                         rf_h, rf_w, n_f_in))
                         arr_rf = arr_rf[:, :, ::rf_s, ::rf_s]
 
                         assert arr_rf.shape[:4] == (n_imgs_part, 1, 
@@ -427,14 +429,17 @@ class HierarchicalGenDiscModel(object):
 
                         # -- select only the receptive field where filters are 
                         #    going to be learned
-                        arr_rf = arr_rf[:, :, n_f_out, n_f_w_out]
+                        arr_rf = arr_rf[:, :, t_y, t_x]
+                        arr_rf.shape = n_imgs_part, rf_h, rf_w, n_f_in
 
                         p_init_idx = p_idx * N_PATCHES_P_IMG
                         p_end_idx = (p_idx + n_imgs_part) * N_PATCHES_P_IMG
 
                         arr_learn[p_init_idx:p_end_idx], \
                         y_learn[p_init_idx:p_end_idx] = \
-                             self._sample_rf(arr_rf, y[p_idx:p_idx+n_imgs_part])
+                             self._sample_rf(arr_rf, 
+                                             y[p_idx:p_idx+n_imgs_part],
+                                             f_shape)
 
                         p_idx += n_imgs_part
 
@@ -457,7 +462,7 @@ class HierarchicalGenDiscModel(object):
         assert f_h <= rf_h and f_w <= rf_w and f_d == rf_d
 
         arr_out = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, dtype=DTYPE)
-        y_out = np.empty((n_imgs * N_PATCHES_P_IMG, 1), dtype=y.dtype)
+        y_out = np.empty((n_imgs * N_PATCHES_P_IMG,), dtype=y.dtype)
 
         for i, rf_img in enumerate(arr_rf):
             for j in xrange(N_PATCHES_P_IMG):
@@ -513,7 +518,7 @@ class HierarchicalGenDiscModel(object):
             hgdm_l_arch = hgdm_l_desc['architecture']
         else:
             hgdm_l_arch = None
-        import pdb; pdb.set_trace()
+
         # -- height, width, and depth of this layer's output
         [l_h, l_w, _, _, l_d, _] = self.shape_stride_by_layer[layer_idx]
 
@@ -528,7 +533,7 @@ class HierarchicalGenDiscModel(object):
                         self._get_neural_imgs_fnames(layer_idx, 'write', n_imgs)
 
         assert len(parts_in) >= 1
-        assert len(parts_out) >= 1
+        #assert len(parts_out) >= 1
         assert write_output or len(parts_out) == 1
 
         i_idx = 0
@@ -587,7 +592,8 @@ class HierarchicalGenDiscModel(object):
             else:
                 self.arr_w = arr_p_o
 
-        assert n_imgs == n_imgs_transf
+        if n_imgs_transf > 0:
+            assert n_imgs == n_imgs_transf
 
         return
 
@@ -734,17 +740,22 @@ class HierarchicalGenDiscModel(object):
                                                         n_imgs)
         fnames = []
 
+        files_exist = True
+
         for part_idx in xrange(n_partitions):
-            fname = f_basename + 'part.' + str(part_idx) + '.npy'
+            fname = f_basename + 'part.' + '%03d' % part_idx + '.npy'
             fname = os.path.join(path, fname)
 
-            if mode == 'read':
-                if not os.path.exists(fname):
-                    fnames = []
-                    partitions = []
-                    break
+            if not os.path.exists(fname):
+                files_exist = False
 
             fnames += [fname]
+
+        if ((mode == 'read' and not files_exist) or 
+            (mode == 'write' and files_exist)):
+
+            fnames = []
+            partitions = []
 
         return fnames, partitions
 
@@ -756,7 +767,7 @@ class HierarchicalGenDiscModel(object):
         hgdm_desc = self.hgdm_description
         filter_key = ''
 
-        for l_idx in xrange(layer_idx):
+        for l_idx in xrange(layer_idx+1):
             if l_idx == 0:
                 continue
             filter_key += hgdm_desc[l_idx]['f_key'] + '.'
@@ -857,10 +868,13 @@ class HierarchicalGenDiscModel(object):
     def _get_partitions(self, layer_init, layer_end, n_imgs):
 
         # -- amount of memory needed to transform n_imgs
-        mem_transform = self._max_mem_transform(layer_init, layer_end, n_imgs)
+        #mem_transform = self._max_mem_transform(layer_init, layer_end, n_imgs)
 
-        n_partitions = int(mem_transform / MAX_MEM_GB + 1.)
-        part_size = n_imgs / n_partitions
+        #n_partitions = int(mem_transform / MAX_MEM_GB + 1.)
+        #part_size = n_imgs / n_partitions
+
+        part_size = PARTITION_SIZE
+        n_partitions = int(n_imgs / float(part_size) + 1)
 
         partitions = []
         part_init = 0
