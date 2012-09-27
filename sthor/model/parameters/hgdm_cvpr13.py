@@ -21,6 +21,17 @@ hgdm_par = {
      {'architecture': 'tiled',
       'f_learn_algo': 'pls',
       'f_key': 'til_pls'}],
+'tie_slm_tie_slm_til_pca':
+    [{},
+     {'architecture': 'tied',
+      'f_learn_algo': 'slm',
+      'f_key': 'tie_slm'},
+     {'architecture': 'tied',
+      'f_learn_algo': 'slm',
+      'f_key': 'tie_slm'},
+     {'architecture': 'tiled',
+      'f_learn_algo': 'pca',
+      'f_key': 'til_pca'}],
 'til_slm_til_slm_til_slm':
     [{},
      {'architecture': 'tiled',

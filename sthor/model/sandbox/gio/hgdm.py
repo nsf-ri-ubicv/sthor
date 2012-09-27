@@ -383,6 +383,8 @@ class HierarchicalGenDiscModel(object):
         for t_y in xrange(n_f_h_out):
             for t_x in xrange(n_f_w_out):
 
+                t1 = time.time()
+
                 if learn_algo == 'slm':
 
                     generate = f_init['generate']
@@ -444,10 +446,15 @@ class HierarchicalGenDiscModel(object):
                         p_idx += n_imgs_part
 
                     assert p_end_idx == n_imgs * N_PATCHES_P_IMG
-
+                    print arr_learn.shape
                     # -- learn filters for the sampled receptive field
                     fb[t_y, t_x] = self._learn_filters(arr_learn, y_learn, 
                                                        learn_algo, n_filters)
+                    print arr_learn.shape
+                t_elapsed = time.time() - t1
+                print 'Filters from tile %d out of %d learned in %g seconds...'\
+                       % (t_y * n_f_h_out + t_x + 1,
+                          n_f_h_out * n_f_w_out, t_elapsed)
 
         fb = np.ascontiguousarray(np.rollaxis(fb, 2, 6)).astype(DTYPE)
 
@@ -482,6 +489,7 @@ class HierarchicalGenDiscModel(object):
 
         n_train, f_h, f_w, f_d = X.shape
 
+        X = X.copy()
         X.shape = n_train, -1
 
         whiten_vectors = _get_norm_info(X)
@@ -492,12 +500,13 @@ class HierarchicalGenDiscModel(object):
         if learn_algo == 'pls':
 
             filters, _, _ = pls(X, y, n_filters, class_specific=False)
+            filters = filters.T
 
         elif learn_algo == 'pca':
 
             pca = PCA(n_components=n_filters)
             pca.fit(X=X)
-            filters = pca.components_.T
+            filters = pca.components_
 
         filters.shape = n_filters, f_h, f_w, f_d
 
