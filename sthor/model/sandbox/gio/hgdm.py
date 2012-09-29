@@ -150,6 +150,9 @@ class HierarchicalGenDiscModel(object):
         assert len(slm_description) == len(hgdm_description)
 
         self.filterbanks = [[]] # layer 0 has no filter bank
+        self.filterbanks_mean = [[]]
+        self.filterbanks_std = [[]]
+
         self.shape_stride_by_layer = _get_shape_stride_by_layer(slm_description,
                                                                 in_shape)
 
@@ -195,16 +198,28 @@ class HierarchicalGenDiscModel(object):
                 self._transf_layer_by_parts(layer_idx-1, n_imgs, True)
 
                 # -- learn filters for the current layer
-                fb = self._sample_learn_filters(layer_idx, y, n_imgs)
+                fb, fb_mean, fb_std = \
+                                self._sample_learn_filters(layer_idx, y, n_imgs)
                 self.filterbanks += [fb.copy()]
 
-                # -- save filters in disk
-                filter_fname = self._get_filter_fname(layer_idx)
+                if fb_mean is not None:
+                    self.filterbanks_mean += [fb_mean.copy()]
+                    self.filterbanks_std += [fb_std.copy()]
+                else:
+                    self.filterbanks_mean += [None]
+                    self.filterbanks_std += [None]
 
-                if os.path.exists(filter_fname):
+                # -- save filters in disk
+                fname, fname_mean, fname_std = self._get_filter_fname(layer_idx)
+
+                if os.path.exists(fname):
                     raise ValueError('filter learned already exist in disk')
                 else:
-                    np.save(filter_fname, fb)
+                    np.save(fname, fb)
+
+                    if fb_mean is not None:
+                        np.save(fname_mean, fb_mean)
+                        np.save(fname_std, fb_std)
 
         assert len(self.filterbanks) == len(slm_desc) == len(hgdm_desc)
 
@@ -317,28 +332,50 @@ class HierarchicalGenDiscModel(object):
             if layer_idx == 0:
                 continue
 
-            filter_fname = self._get_filter_fname(layer_idx)
+            learn_algo = hgdm_l_desc['f_learn_algo']
+
+            fname, fname_mean, fname_std = self._get_filter_fname(layer_idx)
             
-            if os.path.exists(filter_fname):
-                fb = np.load(filter_fname)
+            if os.path.exists(fname):
+                if learn_algo != 'slm':
+                    if os.path.exists(fname_mean):
+                        fb_mean = np.load(fname_mean)
+                        fb_std = np.load(fname_std)
+                    else:
+                        break
+                else:
+                    fb_mean = None
+                    fb_std = None
+
+                fb = np.load(fname)
             else:
                 break
 
             f_init = slm_l_desc[0][1]['initialize']
-            f_shape = f_init['filter_shape']
             hgdm_l_arch = hgdm_l_desc['architecture']
 
             n_f_in = self.shape_stride_by_layer[layer_idx-1][4]
             n_f_out = self.shape_stride_by_layer[layer_idx][4]
             assert n_f_out == f_init['n_filters']
 
+            f_shape = f_init['filter_shape'] + (n_f_in,)
+
             if hgdm_l_arch == 'tiled':
                 n_f_h, n_f_w = self.shape_stride_by_layer[layer_idx][:2]
             else:
                 n_f_h, n_f_w = (1,1)
 
-            fb_shape = (n_f_h, n_f_w) + f_shape + (n_f_in, n_f_out)
+            fb_shape = (n_f_h, n_f_w) + f_shape + (n_f_out,)
             assert fb.shape == fb_shape
+
+            if learn_algo != 'slm':
+                assert fb_mean.shape == (n_f_h, n_f_w) + f_shape
+                assert fb_std.shape == (n_f_h, n_f_w) + f_shape
+                self.filterbanks_mean += [fb_mean.copy()]
+                self.filterbanks_std += [fb_std.copy()]
+            else:
+                self.filterbanks_mean += [None]
+                self.filterbanks_std += [None]
 
             self.filterbanks += [fb.copy()]
 
@@ -371,14 +408,17 @@ class HierarchicalGenDiscModel(object):
         assert n_f_out == n_filters
 
         fb_shape = (n_f_h_out, n_f_w_out, n_filters) + f_shape
-        fb = np.empty(fb_shape, dtype=DTYPE)
 
-        if learn_algo != 'slm':
+        if learn_algo == 'slm':
+            fb_mean, fb_std = None, None 
+        else:
             arr_learn = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, 
                                  dtype=DTYPE)
             y_learn = np.empty((n_imgs * N_PATCHES_P_IMG,), dtype=y.dtype)
 
             fb = np.empty(fb_shape, dtype=DTYPE)
+            fb_mean = np.empty((n_f_h_out, n_f_w_out) + f_shape, dtype=DTYPE)
+            fb_std = np.empty((n_f_h_out, n_f_w_out) + f_shape, dtype=DTYPE)
 
         for t_y in xrange(n_f_h_out):
             for t_x in xrange(n_f_w_out):
@@ -394,17 +434,14 @@ class HierarchicalGenDiscModel(object):
                     rseed = method_kwargs.get('rseed', None)
                     rng_f = np.random.RandomState(rseed)
 
-                    fb = rng_f.uniform(size=fb_shape)
+                    fb = rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
 
+                    # -- remove filter mean
                     for f_idx in xrange(n_filters):
-
                         filt = fb[t_y, t_x, f_idx]
-                        # zero-mean, unit-l2norm
                         filt -= filt.mean()
-                        filt_norm = np.linalg.norm(filt)
-                        assert filt_norm != 0
-                        filt /= filt_norm
                         fb[t_y, t_x, f_idx] = filt
+
                 else:
 
                     input_fnames, partitions = \
@@ -447,10 +484,24 @@ class HierarchicalGenDiscModel(object):
 
                     assert p_end_idx == n_imgs * N_PATCHES_P_IMG
                     print arr_learn.shape
+
                     # -- learn filters for the sampled receptive field
-                    fb[t_y, t_x] = self._learn_filters(arr_learn, y_learn, 
-                                                       learn_algo, n_filters)
+                    fb[t_y, t_x], fb_mean[t_y, t_x], fb_std[t_y, t_x] = \
+                                    self._learn_filters(arr_learn, y_learn, 
+                                                        learn_algo, n_filters)
                     print arr_learn.shape
+
+                # -- normalize filter to unit-l2norm
+                for f_idx in xrange(n_filters):
+
+                    filt = fb[t_y, t_x, f_idx]
+                    # zero-mean, unit-l2norm
+                    #filt -= filt.mean()
+                    filt_norm = np.linalg.norm(filt)
+                    assert filt_norm != 0
+                    filt /= filt_norm
+                    fb[t_y, t_x, f_idx] = filt
+
                 t_elapsed = time.time() - t1
                 print 'Filters from tile %d out of %d learned in %g seconds...'\
                        % (t_y * n_f_h_out + t_x + 1,
@@ -458,7 +509,7 @@ class HierarchicalGenDiscModel(object):
 
         fb = np.ascontiguousarray(np.rollaxis(fb, 2, 6)).astype(DTYPE)
 
-        return fb
+        return fb, fb_mean, fb_std
 
 
     def _sample_rf(self, arr_rf, y, f_shape):
@@ -492,25 +543,39 @@ class HierarchicalGenDiscModel(object):
         X = X.copy()
         X.shape = n_train, -1
 
-        whiten_vectors = _get_norm_info(X)
-        X = _preprocess_features(X, whiten_vectors=whiten_vectors)
+        n_proj_vectors = (n_filters + 1) / 2
+
+        f_mean, f_std = _get_norm_info(X)
+        X = _preprocess_features(X, f_mean, f_std)
         assert(not np.isnan(np.ravel(X)).any())
         assert(not np.isinf(np.ravel(X)).any())
 
         if learn_algo == 'pls':
 
-            filters, _, _ = pls(X, y, n_filters, class_specific=False)
-            filters = filters.T
+            proj_vectors, _, _ = pls(X, y, n_proj_vectors, class_specific=False)
+            proj_vectors = proj_vectors.T
 
         elif learn_algo == 'pca':
 
-            pca = PCA(n_components=n_filters)
+            pca = PCA(n_components=n_proj_vectors)
             pca.fit(X=X)
-            filters = pca.components_
+            proj_vectors = pca.components_
+
+        filters = np.empty((n_filters, f_h * f_w * f_d), dtype=DTYPE)
+
+        for i_f in xrange(n_proj_vectors):
+            filt = proj_vectors[i_f].copy()
+            for i_neg in xrange(2):
+                i_f_neg = i_f * 2 + i_neg
+                if i_f_neg < n_filters:
+                    filters[i_f_neg]= filt
+                filt = -filt
 
         filters.shape = n_filters, f_h, f_w, f_d
+        f_mean.shape = f_h, f_w, f_d
+        f_std.shape = f_h, f_w, f_d
 
-        return filters
+        return filters, f_mean, f_std
 
     # -- transform train neural images from layer x to layer x+1. both the 
     #    input (except for layer 0) and the output are stored in disk
@@ -538,12 +603,17 @@ class HierarchicalGenDiscModel(object):
             input_fnames, parts_in = \
                        self._get_neural_imgs_fnames(layer_idx-1, 'read', n_imgs)
 
-        output_fnames, parts_out = \
+        if write_output:
+            output_fnames, parts_out = \
                         self._get_neural_imgs_fnames(layer_idx, 'write', n_imgs)
+        else:
+            output_fnames = [['']]
+            parts_out = [[0, n_imgs]]
+
 
         assert len(parts_in) >= 1
         #assert len(parts_out) >= 1
-        assert write_output or len(parts_out) == 1
+        #assert write_output or len(parts_out) == 1
 
         i_idx = 0
         n_imgs_transf = 0
@@ -642,7 +712,11 @@ class HierarchicalGenDiscModel(object):
                     self.arr_w = arr_in_tiled[:, :, t_y, t_x, 0, 0, 0] 
                     fb = self.filterbanks[layer_idx][t_y, t_x]
 
-                    self._transf_layer_helper(slm_l_desc, fb)
+                    if self.filterbanks_mean[layer_idx] is not None:
+                        fb_mean = self.filterbanks_mean[layer_idx][t_y, t_x]
+                        fb_std = self.filterbanks_std[layer_idx][t_y, t_x]
+
+                    self._transf_layer_helper(slm_l_desc, fb, fb_mean, fb_std)
                     arr_out[:, :, t_y, t_x] = self.arr_w[:, :, 0, 0]
 
             self.arr_w = arr_out
@@ -650,31 +724,41 @@ class HierarchicalGenDiscModel(object):
         else:
             if layer_idx > 0:
                 fb = self.filterbanks[layer_idx][0, 0]
-            else:
-                fb = None
 
-            self._transf_layer_helper(slm_l_desc, fb)
+                if self.filterbanks_mean[layer_idx] is not None:
+
+                    fb_mean = self.filterbanks_mean[layer_idx][0, 0]
+                    fb_std = self.filterbanks_std[layer_idx][0, 0]
+                else:
+                    fb_mean, fb_std = None, None
+            else:
+                fb, fb_mean, fb_std = None, None, None
+
+            self._transf_layer_helper(slm_l_desc, fb, fb_mean, fb_std)
 
         return
 
 
-    def _transf_layer_helper(self, slm_l_desc, fb):
+    def _transf_layer_helper(self, slm_l_desc, fb, fb_mean, fb_std):
 
         for op_idx, (op_name, op_params) in enumerate(slm_l_desc):
             kwargs = op_params['kwargs']
 
             if op_name == 'fbcorr':
                 fb_par = fb
+                fb_mean_par = fb_mean
+                fb_std_par = fb_std
             else:
-                fb_par = None
+                fb_par, fb_mean_par, fb_std_par = None, None, None
 
-            self.arr_w = self._process_one_op(op_name, kwargs, 
-                                              self.arr_w, fb_par)
+            self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w,
+                                              fb_par, fb_mean_par, fb_std_par)
 
         return
 
 
-    def _process_one_op(self, op_name, kwargs, arr_in, fb=None):
+    def _process_one_op(self, op_name, kwargs, arr_in,
+                        fb=None, f_mean=None, f_std=None):
 
         if op_name == 'lnorm':
 
@@ -701,7 +785,8 @@ class HierarchicalGenDiscModel(object):
 
             # -- filter
             assert arr_in.dtype == np.float32
-            tmp_out = fbcorr5(arr_in, fb)
+
+            tmp_out = fbcorr5(arr_in, fb, f_mean=f_mean, f_std=f_std)
 
             # -- activation
             min_out = -np.inf if min_out is None else min_out
@@ -782,79 +867,15 @@ class HierarchicalGenDiscModel(object):
             filter_key += hgdm_desc[l_idx]['f_key'] + '.'
 
         fname  = model_prefix + '.filters.' + filter_key + 'npy'
+        fname_mean  = model_prefix + '.filters_mean.' + filter_key + 'npy'
+        fname_std  = model_prefix + '.filters_std.' + filter_key + 'npy'
+        
         fname  = os.path.join(path, fname)
+        fname_mean  = os.path.join(path, fname_mean)
+        fname_std  = os.path.join(path, fname_std)
 
-        return fname
+        return fname, fname_mean, fname_std
 
-
-    def _max_mem_transform(self, layer_init, layer_end, n_imgs):
-
-        assert layer_init in (0,1,2,3)
-        assert layer_end in (0,1,2,3)
-
-        slm_desc = self.slm_description
-        hgdm_desc = self.hgdm_description
-
-        if layer_init == 0:
-            l_h, l_w, l_d = self.in_shape + (1,)
-        else:
-            [l_h, l_w, _, _, l_d, _] = \
-                                        self.shape_stride_by_layer[layer_init-1]
-
-        op_d_ant = 1
-        max_mem = self._mem_shape((n_imgs, l_h, l_w, l_d))
-
-        for l_idx, (slm_l_desc, hgdm_l_desc) in enumerate(zip(
-                                            slm_desc[layer_init:layer_end+1],
-                                            hgdm_desc[layer_init:layer_end+1])):
-
-            [_, _, rf_h, rf_w, _, _] = self.shape_stride_by_layer[l_idx]
-
-            for operation in slm_l_desc:
-
-                # -- compute shape by operation
-                if operation[0] == 'fbcorr':
-                    op_h, op_w = operation[1]['initialize']['filter_shape']
-                    op_d = operation[1]['initialize']['n_filters']
-                    op_s = 1
-
-                    #op_elems = op_h * op_w * op_d_ant
-                    op_d_ant = op_d
-                elif operation[0] == 'lpool':
-                    op_h, op_w = operation[1]['kwargs']['ker_shape']
-                    op_d = l_d
-                    op_s = operation[1]['kwargs']['stride']
-
-                    #op_elems = max(op_h, op_w)
-                elif operation[0] == 'lnorm':
-                    op_h, op_w = operation[1]['kwargs']['inker_shape']
-                    op_d = l_d
-                    op_s = 1
-
-                    #op_elems = max(op_h, op_w)
-
-                l_h = (l_h - op_h) / op_s + 1
-                l_w = (l_w - op_w) / op_s + 1
-                l_d = op_d
-
-                if l_idx > 0 and hgdm_l_desc['architecture'] == 'tiled':
-                    rf_h = (rf_h - op_h) / op_s + 1
-                    rf_w = (rf_w - op_w) / op_s + 1
-                    #op_shape = (n_imgs, rf_h, rf_w, max(l_d, op_elems))
-                    op_shape = (n_imgs, rf_h, rf_w, l_d)
-                else:
-                    #op_shape = (n_imgs, l_h, l_w, max(l_d, op_elems))
-                    op_shape = (n_imgs, l_h, l_w, l_d)
-
-                cur_mem = self._mem_shape(op_shape)
-                if cur_mem > max_mem:
-                    max_mem = cur_mem
-
-            cur_mem = self._mem_shape((n_imgs, l_h, l_w, l_d))
-            if cur_mem > max_mem:
-                max_mem = cur_mem
-
-        return max_mem
 
     def _mem_layer(self, layer_idx, n_imgs):
 
@@ -876,12 +897,6 @@ class HierarchicalGenDiscModel(object):
     #    partitioned because its transformaiton exceeds memory limit
     def _get_partitions(self, layer_init, layer_end, n_imgs):
 
-        # -- amount of memory needed to transform n_imgs
-        #mem_transform = self._max_mem_transform(layer_init, layer_end, n_imgs)
-
-        #n_partitions = int(mem_transform / MAX_MEM_GB + 1.)
-        #part_size = n_imgs / n_partitions
-
         part_size = PARTITION_SIZE
         n_partitions = int(n_imgs / float(part_size) + 1)
 
@@ -901,16 +916,13 @@ class HierarchicalGenDiscModel(object):
         return n_partitions, partitions
 
 
-def _preprocess_features(features,
-                        whiten_vectors=None):
+def _preprocess_features(features, fmean, fstd):
 
-    features.shape = features.shape[0], -1
+    assert features[0].shape == fmean.shape
+    assert features[0].shape == fstd.shape
 
-    if whiten_vectors is not None:
-        fmean, fstd = whiten_vectors
-        features_norm = features - fmean
-        assert((fstd != 0).all())
-        features_norm /= fstd
+    features_norm = features - fmean
+    features_norm /= fstd
 
     return features_norm
 

@@ -13,7 +13,9 @@ from skimage.util.shape import view_as_windows
 DEFAULT_STRIDE = 1
 
 
-def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
+def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, 
+            arr_out=None, f_mean=None, f_std=None):
+
     """5D Filterbank Correlation
     XXX: docstring
     """
@@ -40,6 +42,13 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
 
     # -- reshape arr_in
     arr_inr = view_as_windows(arr_in, (1, 1, fbh, fbw, fbd))[::stride, ::stride]
+
+    # -- subtract mean and divide by std. dev. feature-wise
+    if f_mean is not None:
+        arr_inr_new = arr_inr - f_mean
+        arr_inr_new /= f_std
+        arr_inr = arr_inr_new
+
     n_imgs, n_tiles, outh, outw = arr_inr.shape[:4]
 
     assert n_imgs == in_imgs
@@ -59,7 +68,7 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, arr_out=None):
     return arr_out
 
 
-try:
-    fbcorr5 = profile(fbcorr5)
-except NameError:
-    pass
+#try:
+#    fbcorr5 = profile(fbcorr5)
+#except NameError:
+#    pass
