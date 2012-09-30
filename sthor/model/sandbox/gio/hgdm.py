@@ -522,11 +522,19 @@ class HierarchicalGenDiscModel(object):
         arr_out = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, dtype=DTYPE)
         y_out = np.empty((n_imgs * N_PATCHES_P_IMG,), dtype=y.dtype)
 
+        rnd_patches = True
+
         for i, rf_img in enumerate(arr_rf):
             for j in xrange(N_PATCHES_P_IMG):
 
-                p_y = self._rng_p.random_integers(low=0, high=rf_h-f_h)
-                p_x = self._rng_p.random_integers(low=0, high=rf_w-f_w)
+                if rnd_patches:
+                    p_y = self._rng_p.random_integers(low=0, high=rf_h-f_h)
+                    p_x = self._rng_p.random_integers(low=0, high=rf_w-f_w)
+                else:
+                    # -- get patch in the central part of the receptive field
+                    assert N_PATCHES_P_IMG == 1
+                    p_y = (rf_h - f_h) / 2
+                    p_x = (rf_w - f_w) / 2
 
                 i_out = i * N_PATCHES_P_IMG + j
 
