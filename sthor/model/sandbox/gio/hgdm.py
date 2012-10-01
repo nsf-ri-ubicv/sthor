@@ -24,7 +24,8 @@ from pls import pls
 DTYPE = np.float32
 MAX_MEM_GB = 2.
 PARTITION_SIZE = 100
-N_PATCHES_P_IMG = 3
+N_PATCHES_P_IMG = 1
+RND_PATCHES = False
 PATCH_SAMPLE_SEED = 21
 
 # ----------------
@@ -358,6 +359,9 @@ class HierarchicalGenDiscModel(object):
             n_f_out = self.shape_stride_by_layer[layer_idx][4]
             assert n_f_out == f_init['n_filters']
 
+            if learn_algo == 'pspls':
+                n_f_out = fb.shape[-1]
+
             f_shape = f_init['filter_shape'] + (n_f_in,)
 
             if hgdm_l_arch == 'tiled':
@@ -406,6 +410,13 @@ class HierarchicalGenDiscModel(object):
                                            self.shape_stride_by_layer[layer_idx]
 
         assert n_f_out == n_filters
+
+        if learn_algo == 'pspls':
+            n_proj_vectors = (n_filters / 2 + 1)
+            n_categories = len(np.unique(y))
+            n_proj_vectors = int(n_proj_vectors / n_categories + 1.)
+            n_filters = n_categories * n_proj_vectors * 2
+
 
         fb_shape = (n_f_h_out, n_f_w_out, n_filters) + f_shape
 
@@ -522,12 +533,11 @@ class HierarchicalGenDiscModel(object):
         arr_out = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, dtype=DTYPE)
         y_out = np.empty((n_imgs * N_PATCHES_P_IMG,), dtype=y.dtype)
 
-        rnd_patches = True
 
         for i, rf_img in enumerate(arr_rf):
             for j in xrange(N_PATCHES_P_IMG):
 
-                if rnd_patches:
+                if RND_PATCHES:
                     p_y = self._rng_p.random_integers(low=0, high=rf_h-f_h)
                     p_x = self._rng_p.random_integers(low=0, high=rf_w-f_w)
                 else:
@@ -562,6 +572,19 @@ class HierarchicalGenDiscModel(object):
 
             proj_vectors, _, _ = pls(X, y, n_proj_vectors, class_specific=False)
             proj_vectors = proj_vectors.T
+
+        elif learn_algo == 'pspls':
+
+            n_categories = len(np.unique(y))
+            n_proj_vectors = n_proj_vectors / n_categories
+
+            proj_vectors, _, _ = pls(X, y, n_proj_vectors, class_specific=True)
+
+            proj_vectors = np.ascontiguousarray(np.swapaxes(proj_vectors, 1, 2)
+                                               ).astype(DTYPE)
+
+            n_proj_vectors = n_categories * n_proj_vectors
+            proj_vectors.shape = n_proj_vectors, f_h  * f_w * f_d
 
         elif learn_algo == 'pca':
 
