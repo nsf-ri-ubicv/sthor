@@ -20,12 +20,14 @@ from sthor.operation.sandbox import lpool5
 from sklearn.decomposition import PCA
 from pls import pls
 
+from sklearn.cluster import MiniBatchKMeans
+#from scipy.cluster.vq import kmeans
 
 DTYPE = np.float32
 MAX_MEM_GB = 2.
 PARTITION_SIZE = 100
-N_PATCHES_P_IMG = 1
-RND_PATCHES = False
+N_PATCHES_P_IMG = 3
+RND_PATCHES = True
 PATCH_SAMPLE_SEED = 21
 
 # ----------------
@@ -267,6 +269,7 @@ class HierarchicalGenDiscModel(object):
                     # -- initialize arr_out
                     [l_h, l_w, _, _, l_d, _] = \
                                     self.shape_stride_by_layer[self.n_layers-1]
+                    #l_d = 332
                     arr_out = np.empty((n_imgs, 1, l_h, l_w, l_d), dtype=DTYPE)
 
                 self.arr_w = arr_in[part_init:part_end]
@@ -422,6 +425,14 @@ class HierarchicalGenDiscModel(object):
 
         if learn_algo == 'slm':
             fb_mean, fb_std = None, None 
+
+            generate = f_init['generate']
+            method_name, method_kwargs = generate
+            assert method_name == 'random:uniform'
+
+            rseed = method_kwargs.get('rseed', None)
+            rng_f = np.random.RandomState(rseed)
+
         else:
             arr_learn = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, 
                                  dtype=DTYPE)
@@ -437,13 +448,6 @@ class HierarchicalGenDiscModel(object):
                 t1 = time.time()
 
                 if learn_algo == 'slm':
-
-                    generate = f_init['generate']
-                    method_name, method_kwargs = generate
-                    assert method_name == 'random:uniform'
-
-                    rseed = method_kwargs.get('rseed', None)
-                    rng_f = np.random.RandomState(rseed)
 
                     fb = rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
 
@@ -561,46 +565,65 @@ class HierarchicalGenDiscModel(object):
         X = X.copy()
         X.shape = n_train, -1
 
-        n_proj_vectors = (n_filters + 1) / 2
-
         f_mean, f_std = _get_norm_info(X)
         X = _preprocess_features(X, f_mean, f_std)
         assert(not np.isnan(np.ravel(X)).any())
         assert(not np.isinf(np.ravel(X)).any())
 
-        if learn_algo == 'pls':
+        if learn_algo in ('pca', 'pls', 'pspls'):
 
-            proj_vectors, _, _ = pls(X, y, n_proj_vectors, class_specific=False)
-            proj_vectors = proj_vectors.T
+            n_proj_vectors = (n_filters + 1) / 2
 
-        elif learn_algo == 'pspls':
+            if learn_algo == 'pls':
 
-            n_categories = len(np.unique(y))
-            n_proj_vectors = n_proj_vectors / n_categories
+                proj_vectors, _, _ = pls(X, y, n_proj_vectors, 
+                                         class_specific=False)
+                proj_vectors = proj_vectors.T
 
-            proj_vectors, _, _ = pls(X, y, n_proj_vectors, class_specific=True)
+            elif learn_algo == 'pspls':
 
-            proj_vectors = np.ascontiguousarray(np.swapaxes(proj_vectors, 1, 2)
-                                               ).astype(DTYPE)
+                n_categories = len(np.unique(y))
+                n_proj_vectors = n_proj_vectors / n_categories
 
-            n_proj_vectors = n_categories * n_proj_vectors
-            proj_vectors.shape = n_proj_vectors, f_h  * f_w * f_d
+                proj_vectors, _, _ = pls(X, y, n_proj_vectors,
+                                         class_specific=True)
 
-        elif learn_algo == 'pca':
+                proj_vectors = np.ascontiguousarray(
+                               np.swapaxes(proj_vectors, 1, 2)).astype(DTYPE)
 
-            pca = PCA(n_components=n_proj_vectors)
-            pca.fit(X=X)
-            proj_vectors = pca.components_
+                n_proj_vectors = n_categories * n_proj_vectors
+                proj_vectors.shape = n_proj_vectors, f_h  * f_w * f_d
 
-        filters = np.empty((n_filters, f_h * f_w * f_d), dtype=DTYPE)
+            elif learn_algo == 'pca':
 
-        for i_f in xrange(n_proj_vectors):
-            filt = proj_vectors[i_f].copy()
-            for i_neg in xrange(2):
-                i_f_neg = i_f * 2 + i_neg
-                if i_f_neg < n_filters:
-                    filters[i_f_neg]= filt
-                filt = -filt
+                pca = PCA(n_components=n_proj_vectors)
+                pca.fit(X=X)
+                proj_vectors = pca.components_
+
+            filters = np.empty((n_filters, f_h * f_w * f_d), dtype=DTYPE)
+
+            for i_f in xrange(n_proj_vectors):
+                filt = proj_vectors[i_f].copy()
+                for i_neg in xrange(2):
+                    i_f_neg = i_f * 2 + i_neg
+                    if i_f_neg < n_filters:
+                        filters[i_f_neg]= filt
+                    filt = -filt
+
+        elif learn_algo == 'kmeans':
+
+            mbk = MiniBatchKMeans(n_clusters=n_filters,
+                                  init='k-means++', 
+                                  max_iter=50,
+                                  batch_size=1000,
+                                  max_no_improvement=None,
+                                  compute_labels=False,
+                                  verbose=1,
+                                  random_state=42)
+
+            mbk.fit(X)
+            filters = mbk.cluster_centers_
+            #proj_vectors, _ = kmeans(X, n_proj_vectors)
 
         filters.shape = n_filters, f_h, f_w, f_d
         f_mean.shape = f_h, f_w, f_d
@@ -662,6 +685,8 @@ class HierarchicalGenDiscModel(object):
 
             p_o_size = p_o_end - p_o_init
             p_o_idx = 0
+
+            #l_d = 332
 
             arr_p_o = np.empty((p_o_size, 1, l_h, l_w, l_d), dtype=DTYPE)
 
@@ -727,6 +752,8 @@ class HierarchicalGenDiscModel(object):
             [tiles_h_out, tiles_w_out, rfh, rfw, tiles_d_out, rfs] = \
                                         self.shape_stride_by_layer[layer_idx]
 
+            #tiles_d_out = 332
+
             arr_in_tiled = view_as_windows(self.arr_w, (1, 1, rfh, rfw, 
                                            layer_in_shape[2]))
             arr_in_tiled = arr_in_tiled[:, :, ::rfs, ::rfs]
@@ -746,6 +773,8 @@ class HierarchicalGenDiscModel(object):
                     if self.filterbanks_mean[layer_idx] is not None:
                         fb_mean = self.filterbanks_mean[layer_idx][t_y, t_x]
                         fb_std = self.filterbanks_std[layer_idx][t_y, t_x]
+                    else:
+                        fb_mean, fb_std = None, None
 
                     self._transf_layer_helper(slm_l_desc, fb, fb_mean, fb_std)
                     arr_out[:, :, t_y, t_x] = self.arr_w[:, :, 0, 0]
