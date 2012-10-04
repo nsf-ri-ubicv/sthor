@@ -341,7 +341,7 @@ class HierarchicalGenDiscModel(object):
             fname, fname_mean, fname_std = self._get_filter_fname(layer_idx)
             
             if os.path.exists(fname):
-                if learn_algo != 'slm':
+                if learn_algo not in  ('slm', 'kmeans'):
                     if os.path.exists(fname_mean):
                         fb_mean = np.load(fname_mean)
                         fb_std = np.load(fname_std)
@@ -375,7 +375,7 @@ class HierarchicalGenDiscModel(object):
             fb_shape = (n_f_h, n_f_w) + f_shape + (n_f_out,)
             assert fb.shape == fb_shape
 
-            if learn_algo != 'slm':
+            if learn_algo not in ('slm', 'kmeans'):
                 assert fb_mean.shape == (n_f_h, n_f_w) + f_shape
                 assert fb_std.shape == (n_f_h, n_f_w) + f_shape
                 self.filterbanks_mean += [fb_mean.copy()]
@@ -507,6 +507,7 @@ class HierarchicalGenDiscModel(object):
                     print arr_learn.shape
 
                 # -- normalize filter to unit-l2norm
+                """
                 for f_idx in xrange(n_filters):
 
                     filt = fb[t_y, t_x, f_idx]
@@ -516,6 +517,11 @@ class HierarchicalGenDiscModel(object):
                     assert filt_norm != 0
                     filt /= filt_norm
                     fb[t_y, t_x, f_idx] = filt
+                """
+
+                # -- workaorund
+                if learn_algo == 'kmeans':
+                    fb_mean, fb_std = None, None
 
                 t_elapsed = time.time() - t1
                 print 'Filters from tile %d out of %d learned in %g seconds...'\
@@ -565,12 +571,13 @@ class HierarchicalGenDiscModel(object):
         X = X.copy()
         X.shape = n_train, -1
 
-        f_mean, f_std = _get_norm_info(X)
-        X = _preprocess_features(X, f_mean, f_std)
-        assert(not np.isnan(np.ravel(X)).any())
-        assert(not np.isinf(np.ravel(X)).any())
-
         if learn_algo in ('pca', 'pls', 'pspls'):
+
+            f_mean, f_std = _get_norm_info(X)
+            X = _preprocess_features(X, f_mean, f_std)
+
+            f_mean.shape = f_h, f_w, f_d
+            f_std.shape = f_h, f_w, f_d
 
             n_proj_vectors = (n_filters + 1) / 2
 
@@ -612,6 +619,20 @@ class HierarchicalGenDiscModel(object):
 
         elif learn_algo == 'kmeans':
 
+            #import pdb; pdb.set_trace()
+
+            f_mean = X.mean(axis=1)
+            f_std = X.std(axis=1)
+            f_std[f_std == 0.] = 1.
+
+            X = (X.T - f_mean)
+            X = (X / f_std).T
+
+            assert(not np.isnan(np.ravel(X)).any())
+            assert(not np.isinf(np.ravel(X)).any())
+
+            f_mean, f_std = None, None
+
             mbk = MiniBatchKMeans(n_clusters=n_filters,
                                   init='k-means++', 
                                   max_iter=50,
@@ -626,8 +647,6 @@ class HierarchicalGenDiscModel(object):
             #proj_vectors, _ = kmeans(X, n_proj_vectors)
 
         filters.shape = n_filters, f_h, f_w, f_d
-        f_mean.shape = f_h, f_w, f_d
-        f_std.shape = f_h, f_w, f_d
 
         return filters, f_mean, f_std
 

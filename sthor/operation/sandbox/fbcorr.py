@@ -56,6 +56,16 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
     arr_inrm = arr_inr.reshape(n_imgs * n_tiles * outh * outw, -1)
 
+    if arr_inrm.shape == 3200:
+        # -- kmeans workaround
+        assert f_mean is None
+        p_mean = arr_inrm.mean(axis=1)
+        p_std = arr_inrm.std(axis=1)
+        p_std[p_std == 0.] = 1.
+        arr_inrm_new = (arr_inrm.T - p_mean)
+        arr_inrm_new = (arr_inrm_new / p_std).T
+        arr_inrm = arr_inrm_new
+
     # -- reshape arr_fb
     arr_fbm = arr_fb.reshape((fbh * fbw * fbd, fbn))
 
