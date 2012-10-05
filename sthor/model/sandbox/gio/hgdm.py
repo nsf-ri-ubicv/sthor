@@ -423,15 +423,16 @@ class HierarchicalGenDiscModel(object):
 
         fb_shape = (n_f_h_out, n_f_w_out, n_filters) + f_shape
 
-        if learn_algo == 'slm':
-            fb_mean, fb_std = None, None 
-
+        if learn_algo in ('slm', 'slm_zca'):
             generate = f_init['generate']
             method_name, method_kwargs = generate
             assert method_name == 'random:uniform'
 
             rseed = method_kwargs.get('rseed', None)
-            rng_f = np.random.RandomState(rseed)
+            self.rng_f = np.random.RandomState(rseed)
+
+        if learn_algo == 'slm':
+            fb_mean, fb_std = None, None 
 
         else:
             arr_learn = np.empty((n_imgs * N_PATCHES_P_IMG,) + f_shape, 
@@ -439,8 +440,18 @@ class HierarchicalGenDiscModel(object):
             y_learn = np.empty((n_imgs * N_PATCHES_P_IMG,), dtype=y.dtype)
 
             fb = np.empty(fb_shape, dtype=DTYPE)
-            fb_mean = np.empty((n_f_h_out, n_f_w_out) + f_shape, dtype=DTYPE)
-            fb_std = np.empty((n_f_h_out, n_f_w_out) + f_shape, dtype=DTYPE)
+
+            if learn_algo == 'slm_zca':
+                f_size = f_shape[0] * f_shape[1] * f_shape[2]
+                fb_mean = np.empty((n_f_h_out, n_f_w_out) + (f_size,), 
+                                   dtype=DTYPE)
+                fb_std = np.empty((n_f_h_out, n_f_w_out) + (f_size,f_size), 
+                                   dtype=DTYPE)
+
+            else:
+                fb_mean = np.empty((n_f_h_out, n_f_w_out) + f_shape, 
+                                   dtype=DTYPE)
+                fb_std = np.empty((n_f_h_out, n_f_w_out) + f_shape, dtype=DTYPE)
 
         for t_y in xrange(n_f_h_out):
             for t_x in xrange(n_f_w_out):
@@ -449,7 +460,7 @@ class HierarchicalGenDiscModel(object):
 
                 if learn_algo == 'slm':
 
-                    fb = rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
+                    fb = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
 
                     # -- remove filter mean
                     for f_idx in xrange(n_filters):
@@ -507,7 +518,6 @@ class HierarchicalGenDiscModel(object):
                     print arr_learn.shape
 
                 # -- normalize filter to unit-l2norm
-                """
                 for f_idx in xrange(n_filters):
 
                     filt = fb[t_y, t_x, f_idx]
@@ -517,7 +527,6 @@ class HierarchicalGenDiscModel(object):
                     assert filt_norm != 0
                     filt /= filt_norm
                     fb[t_y, t_x, f_idx] = filt
-                """
 
                 # -- workaorund
                 if learn_algo == 'kmeans':
@@ -617,9 +626,38 @@ class HierarchicalGenDiscModel(object):
                         filters[i_f_neg]= filt
                     filt = -filt
 
-        elif learn_algo == 'kmeans':
+        elif learn_algo == 'slm_zca':
 
-            #import pdb; pdb.set_trace()
+            # Constrast normalization
+            p_mean = X.mean(axis=1)
+            p_std = X.std(axis=1)
+            p_std[p_std == 0.] = 1.
+
+            X = (X.T - p_mean)
+            X = (X / p_std).T
+
+            # ZCA whitening (with low-pass)
+            f_mean = X.mean(axis=0)
+            Xm = X - f_mean
+            C = np.dot(Xm.T, Xm) / (Xm.shape[0] - 1)
+            D, V = np.linalg.eigh(C)
+            P = np.dot(np.sqrt(1.0 / (D + 0.1)) * V, V.T)
+
+            # TODO: fix this workaround
+            f_std = P
+
+            # -- SLM filter
+            fb_shape = (n_filters, f_h, f_w, f_d)
+            filters = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
+
+            # -- remove filter mean
+            for f_idx in xrange(n_filters):
+                filt = filters[f_idx]
+                filt -= filt.mean()
+                filters[f_idx] = filt
+
+
+        elif learn_algo == 'kmeans':
 
             f_mean = X.mean(axis=1)
             f_std = X.std(axis=1)
@@ -639,7 +677,7 @@ class HierarchicalGenDiscModel(object):
                                   batch_size=1000,
                                   max_no_improvement=None,
                                   compute_labels=False,
-                                  verbose=1,
+                                  verbose=0,
                                   random_state=42)
 
             mbk.fit(X)

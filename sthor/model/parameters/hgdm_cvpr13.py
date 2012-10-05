@@ -109,6 +109,17 @@ hgdm_par = {
      {'architecture': 'tied',
       'f_learn_algo': 'kmeans',
       'f_key': 'tie_kmeans'}],
+'tie_slm_tie_slm_tie_slm_zca':
+    [{},
+     {'architecture': 'tied',
+      'f_learn_algo': 'slm',
+      'f_key': 'tie_slm'},
+     {'architecture': 'tied',
+      'f_learn_algo': 'slm',
+      'f_key': 'tie_slm'},
+     {'architecture': 'tied',
+      'f_learn_algo': 'slm_zca',
+      'f_key': 'tie_slm_zca'}],
 'tie_slm_tie_slm_til_kmeans':
     [{},
      {'architecture': 'tied',
