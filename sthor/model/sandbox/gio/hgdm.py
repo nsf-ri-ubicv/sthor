@@ -19,6 +19,7 @@ from sthor.operation.sandbox import lpool5
 
 from sklearn.decomposition import PCA
 from pls import pls
+from omp1 import omp1
 
 from sklearn.cluster import MiniBatchKMeans
 #from scipy.cluster.vq import kmeans
@@ -250,7 +251,7 @@ class HierarchicalGenDiscModel(object):
         mem_arr_out = self._mem_layer(self.n_layers-1, n_imgs)
 
         if mem_arr_out > MAX_MEM_GB:
-            raise ValueError("size of output array is greater than '%s'; " +
+            raise ValueError("size of output array is greater than %s; " +
                              "the maximum allowed" % MAX_MEM_GB)
 
         # -- determine if and how arr_in is partitioned
@@ -441,7 +442,7 @@ class HierarchicalGenDiscModel(object):
 
             fb = np.empty(fb_shape, dtype=DTYPE)
 
-            if learn_algo == 'slm_zca':
+            if learn_algo in ('slm_zca', 'zca_omp1'):
                 f_size = f_shape[0] * f_shape[1] * f_shape[2]
                 fb_mean = np.empty((n_f_h_out, n_f_w_out) + (f_size,), 
                                    dtype=DTYPE)
@@ -626,7 +627,9 @@ class HierarchicalGenDiscModel(object):
                         filters[i_f_neg]= filt
                     filt = -filt
 
-        elif learn_algo == 'slm_zca':
+        elif learn_algo in ('slm_zca', 'zca_omp1'):
+
+            fb_shape = (n_filters, f_h, f_w, f_d)
 
             # Constrast normalization
             p_mean = X.mean(axis=1)
@@ -646,16 +649,23 @@ class HierarchicalGenDiscModel(object):
             # TODO: fix this workaround
             f_std = P
 
-            # -- SLM filter
-            fb_shape = (n_filters, f_h, f_w, f_d)
-            filters = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
+            if learn_algo == 'slm_zca':
 
-            # -- remove filter mean
-            for f_idx in xrange(n_filters):
-                filt = filters[f_idx]
-                filt -= filt.mean()
-                filters[f_idx] = filt
+                filters = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
+                # -- remove filter mean
+                for f_idx in xrange(n_filters):
+                    filt = filters[f_idx]
+                    filt -= filt.mean()
+                    filters[f_idx] = filt
 
+            elif learn_algo == 'zca_omp1':
+
+                import pdb; pdb.set_trace()
+
+                X = np.dot(Xm, P)
+                filters = omp1(X, n_filters / 2, 50)
+
+                filters = np.concatenate((filters, -filters), axis=0)
 
         elif learn_algo == 'kmeans':
 
@@ -722,7 +732,8 @@ class HierarchicalGenDiscModel(object):
             parts_out = [[0, n_imgs]]
 
 
-        assert len(parts_in) >= 1
+        n_parts_in = len(parts_in)
+        assert  n_parts_in >= 1
         #assert len(parts_out) >= 1
         #assert write_output or len(parts_out) == 1
 
@@ -737,6 +748,8 @@ class HierarchicalGenDiscModel(object):
 
         p_i_size = parts_in[i_idx][1] - parts_in[i_idx][0]
         p_i_idx = 0
+
+        t0 = time.time()
 
         for o_fname, (p_o_init, p_o_end) in zip(output_fnames, parts_out):
 
@@ -766,6 +779,12 @@ class HierarchicalGenDiscModel(object):
                 if p_i_idx == p_i_size:
 
                     i_idx +=1
+
+                    t_elapsed = time.time() - t0
+                    print 'Partiton %d out of %d processed in %g seconds...' % (
+                          i_idx, n_parts_in, t_elapsed)
+                    t0 = time.time()
+
                     if i_idx < len(parts_in):
                         i_fname = input_fnames[i_idx]
                         arr_p_i = np.load(i_fname)
