@@ -9,7 +9,7 @@ def omp1(X, k, n_iterations, seed=63):
     rng = np.random.RandomState(seed)
 
     # initialize and normalize dictionary
-    D = rg.randn(k, n_features)
+    D = rng.randn(k, n_features)
     D = (D.T / np.sqrt((D ** 2).sum(axis=1) + 1e-20)).T
 
     for i in xrange(n_iterations):
@@ -37,7 +37,9 @@ def omp1(X, k, n_iterations, seed=63):
 
         # -- reinitialize empty atoms
         empty_atoms=(D_new ** 2).sum(axis=1) < 1e-3
-        D_new[empty_atoms] = rg.randn(empty_atoms.sum(),n_features)
+        print 'empty_atoms', empty_atoms.sum()
+
+        D_new[empty_atoms] = rng.randn(empty_atoms.sum(),n_features)
 
         # -- normalize dictionary
         D = (D_new.T / np.sqrt((D_new ** 2).sum(axis=1) + 1e-20)).T

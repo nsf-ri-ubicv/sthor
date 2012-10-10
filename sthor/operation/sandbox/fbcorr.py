@@ -52,7 +52,7 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
     arr_inrm = arr_inr.reshape(n_imgs * n_tiles * outh * outw, f_size)
 
-    if arr_inrm.shape[1] == 3200:
+    if arr_inrm.shape[1] == 3201:
         print 'ok'
         # -- kmeans and slm_zca workaround
         #assert f_mean is None
@@ -77,7 +77,7 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
         arr_inr_new = np.dot(arr_inr_new, f_std)
 
-        arr_inr = arr_inr_new
+        arr_inrm = arr_inr_new
 
     # -- reshape arr_fb
     arr_fbm = arr_fb.reshape((f_size, fbn))

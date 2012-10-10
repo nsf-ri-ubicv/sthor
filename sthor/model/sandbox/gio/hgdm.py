@@ -25,8 +25,8 @@ from sklearn.cluster import MiniBatchKMeans
 #from scipy.cluster.vq import kmeans
 
 DTYPE = np.float32
-MAX_MEM_GB = 2.
-PARTITION_SIZE = 100
+MAX_MEM_GB = 3.
+PARTITION_SIZE = 25
 N_PATCHES_P_IMG = 3
 RND_PATCHES = True
 PATCH_SAMPLE_SEED = 21
@@ -312,7 +312,7 @@ class HierarchicalGenDiscModel(object):
 
         if mem_arr_out > MAX_MEM_GB:
 
-            pprint("size of output array is greater than '%s'; " +
+            pprint("size of output array is greater than %s; " +
                    "the maximum allowed. filters were learned, but" +
                    "input array was not transformed" % MAX_MEM_GB)
         else:
@@ -344,15 +344,15 @@ class HierarchicalGenDiscModel(object):
             if os.path.exists(fname):
                 if learn_algo not in  ('slm', 'kmeans'):
                     if os.path.exists(fname_mean):
-                        fb_mean = np.load(fname_mean)
-                        fb_std = np.load(fname_std)
+                        fb_mean = np.load(fname_mean, mmap_mode='r')
+                        fb_std = np.load(fname_std, mmap_mode='r')
                     else:
                         break
                 else:
                     fb_mean = None
                     fb_std = None
 
-                fb = np.load(fname)
+                fb = np.load(fname, mmap_mode='r')
             else:
                 break
 
@@ -483,7 +483,7 @@ class HierarchicalGenDiscModel(object):
                     for fname, (part_init, part_end) in zip(input_fnames, 
                                                             partitions):
                         n_imgs_part = part_end - part_init
-                        arr_p = np.load(fname)
+                        arr_p = np.load(fname, mmap_mode='r')
                         assert n_imgs_part == arr_p.shape[0]
 
                         arr_rf = view_as_windows(arr_p, (1, 1, 
@@ -641,8 +641,8 @@ class HierarchicalGenDiscModel(object):
 
             # ZCA whitening (with low-pass)
             f_mean = X.mean(axis=0)
-            Xm = X - f_mean
-            C = np.dot(Xm.T, Xm) / (Xm.shape[0] - 1)
+            X = X - f_mean
+            C = np.dot(X.T, X) / (X.shape[0] - 1)
             D, V = np.linalg.eigh(C)
             P = np.dot(np.sqrt(1.0 / (D + 0.1)) * V, V.T)
 
@@ -660,12 +660,10 @@ class HierarchicalGenDiscModel(object):
 
             elif learn_algo == 'zca_omp1':
 
-                import pdb; pdb.set_trace()
+                X = np.dot(X, P)
+                filters = omp1(X, n_filters, 50)
 
-                X = np.dot(Xm, P)
-                filters = omp1(X, n_filters / 2, 50)
-
-                filters = np.concatenate((filters, -filters), axis=0)
+                #filters = np.concatenate((filters, -filters), axis=0)
 
         elif learn_algo == 'kmeans':
 
@@ -744,7 +742,7 @@ class HierarchicalGenDiscModel(object):
             arr_p_i = self.arr_w
         else:
             i_fname = input_fnames[i_idx]
-            arr_p_i = np.load(i_fname)
+            arr_p_i = np.load(i_fname, mmap_mode='r')
 
         p_i_size = parts_in[i_idx][1] - parts_in[i_idx][0]
         p_i_idx = 0
@@ -757,6 +755,7 @@ class HierarchicalGenDiscModel(object):
             p_o_idx = 0
 
             #l_d = 332
+            #import pdb; pdb.set_trace()
 
             arr_p_o = np.empty((p_o_size, 1, l_h, l_w, l_d), dtype=DTYPE)
 
@@ -787,7 +786,7 @@ class HierarchicalGenDiscModel(object):
 
                     if i_idx < len(parts_in):
                         i_fname = input_fnames[i_idx]
-                        arr_p_i = np.load(i_fname)
+                        arr_p_i = np.load(i_fname, mmap_mode='r')
                         p_i_size = parts_in[i_idx][1] - parts_in[i_idx][0]
                         p_i_idx = 0
 
@@ -923,6 +922,8 @@ class HierarchicalGenDiscModel(object):
             assert arr_in.dtype == np.float32
 
             tmp_out = fbcorr5(arr_in, fb, f_mean=f_mean, f_std=f_std)
+
+            #import pdb; pdb.set_trace()
 
             # -- activation
             min_out = -np.inf if min_out is None else min_out
