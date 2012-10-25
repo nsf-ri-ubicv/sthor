@@ -15,7 +15,7 @@ from sthor.operation.sandbox import fbcorr5
 from sthor.operation.sandbox import lpool5
 
 DTYPE = np.float32
-MAX_MEM_GB = 3.
+MAX_MEM_GB = 20.
 PARTITION_SIZE = 35
 
 # ----------------
