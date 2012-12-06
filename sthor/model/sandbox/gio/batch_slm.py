@@ -103,7 +103,7 @@ def _get_shape_stride_by_layer(slm_description, in_shape):
 
 class BatchSequentialLayeredModel(object):
 
-    def __init__(self, in_shape, description):
+    def __init__(self, in_shape, description, filterbanks=None):
 
         pprint(description)
 
@@ -113,16 +113,24 @@ class BatchSequentialLayeredModel(object):
 
         self.n_layers = len(description)
 
-        if self.n_layers == 4:
-            self.filterbanks = [[]] # layer 0 has no filter bank
-        else:
-            self.filterbanks = []
+        #if self.n_layers == 4:
+        #if self.n_layers == 3: # patch for convnet
+        #    self.filterbanks = [[]] # layer 0 has no filter bank
+        #else:
 
         self.shape_stride_by_layer = _get_shape_stride_by_layer(description,
                                                                 in_shape)
 
-        # -- set filters.
-        self._fit()
+        if filterbanks is not None:
+            self.filterbanks = filterbanks
+        else:
+            if self.n_layers == 4:
+                self.filterbanks = [[]] # layer 0 has no filter bank
+            else:
+                self.filterbanks = []
+
+            # -- set filters
+            self._fit()
 
         # -- this is the working array, that will be used throughout object
         #    methods. its purpose is to avoid a large memory footprint due
@@ -144,7 +152,13 @@ class BatchSequentialLayeredModel(object):
                 n_f_in = self.shape_stride_by_layer[layer_idx-1][4]
 
             l_desc = desc[layer_idx]
-            f_desc = l_desc[0][1] # fg11-type slm
+            op_name, f_desc = l_desc[0] # fg11-type slm
+            #f_desc = l_desc[0][1] 
+
+            if op_name != 'fbcorr':
+                self.filterbanks += []
+                continue
+
             f_init = f_desc['initialize']
             f_shape = f_init['filter_shape'] + (n_f_in,)
             n_filters = f_init['n_filters']
