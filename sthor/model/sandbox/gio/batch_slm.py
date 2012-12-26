@@ -103,7 +103,8 @@ def _get_shape_stride_by_layer(slm_description, in_shape):
 
 class BatchSequentialLayeredModel(object):
 
-    def __init__(self, in_shape, description, filterbanks=None):
+    def __init__(self, in_shape, description, filterbanks=None,
+                 fb_mean=None, fb_std=None):
 
         pprint(description)
 
@@ -123,15 +124,21 @@ class BatchSequentialLayeredModel(object):
 
         if filterbanks is not None:
             self.filterbanks = filterbanks
+            self.fb_mean = fb_mean
+            self.fb_std = fb_std
         else:
             if self.n_layers == 4:
                 self.filterbanks = [[]] # layer 0 has no filter bank
             else:
                 self.filterbanks = []
 
+            self.fb_mean = None
+            self.fb_std = None
+
             # -- set filters
             self._fit()
 
+        print 'GIOVANI: remote intersect subtraction in fbcorr'
         # -- this is the working array, that will be used throughout object
         #    methods. its purpose is to avoid a large memory footprint due
         #    to modularization.
@@ -266,15 +273,26 @@ class BatchSequentialLayeredModel(object):
 
             if op_name == 'fbcorr':
                 fb = self.filterbanks[layer_idx]
+
+                if self.fb_mean is not None:
+                    f_mean = self.fb_mean[layer_idx]
+                    f_std = self.fb_std[layer_idx]
+                else:
+                    f_mean = None
+                    f_std = None
             else:
                 fb = None
+                f_mean = None
+                f_std = None
 
-            self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w, fb)
+            self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w,
+                                              fb, f_mean, f_std)
 
         return
 
 
-    def _process_one_op(self, op_name, kwargs, arr_in, fb=None):
+    def _process_one_op(self, op_name, kwargs, arr_in,
+                        fb=None, f_mean=None, f_std=None):
 
         if op_name == 'lnorm':
 
@@ -302,15 +320,20 @@ class BatchSequentialLayeredModel(object):
             # -- filter
             assert arr_in.dtype == np.float32
 
-            tmp_out = fbcorr5(arr_in, fb)
+            tmp_out = fbcorr5(arr_in, fb, f_mean, f_std)
+
+            import pdb; pdb.set_trace()
+            #tmp_out -= 0.58
 
             # -- activation
             min_out = -np.inf if min_out is None else min_out
             max_out = +np.inf if max_out is None else max_out
             # insure that the type is right before calling numexpr
             min_out = np.array([min_out], dtype=arr_in.dtype)
+            #min_out2 = np.array([0.0], dtype=arr_in.dtype)
             max_out = np.array([max_out], dtype=arr_in.dtype)
             # call numexpr
+            #tmp_out = ne.evaluate('where(tmp_out < min_out, min_out2, tmp_out)')
             tmp_out = ne.evaluate('where(tmp_out < min_out, min_out, tmp_out)')
             tmp_out = ne.evaluate('where(tmp_out > max_out, max_out, tmp_out)')
             assert tmp_out.dtype == arr_in.dtype
