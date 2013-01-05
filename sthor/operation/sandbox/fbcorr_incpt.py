@@ -5,7 +5,7 @@
 #
 # License: BSD
 
-__all__ = ['fbcorr5']
+__all__ = ['fbcorr5_incpt']
 
 import numpy as np
 from skimage.util.shape import view_as_windows
@@ -13,12 +13,7 @@ from skimage.util.shape import view_as_windows
 DEFAULT_STRIDE = 1
 
 
-def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, 
-            arr_out=None, f_mean=None, f_std=None):
-
-    """5D Filterbank Correlation
-    XXX: docstring
-    """
+def fbcorr5_incpt(arr_in, arr_fb, incpts, stride=DEFAULT_STRIDE, arr_out=None):
 
     assert arr_in.ndim == 5
     assert arr_fb.ndim == 4
@@ -33,6 +28,8 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
     assert fbh <= inh
     assert fbw <= inw
     assert fbd == ind
+
+    assert incpts.shape[0] == fbn
 
     if arr_out is not None:
         assert arr_out.dtype == arr_in.dtype
@@ -52,50 +49,19 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
     arr_inrm = arr_inr.reshape(n_imgs * n_tiles * outh * outw, f_size)
 
-    if arr_inrm.shape[1] == 3201:
-        print 'ok'
-        # -- kmeans and slm_zca workaround
-        #assert f_mean is None
-
-        # Contrast normalization
-        p_mean = arr_inrm.mean(axis=1)
-        p_std = arr_inrm.std(axis=1)
-        p_std[p_std == 0.] = 1.
-
-        arr_inrm_new = (arr_inrm.T - p_mean)
-        arr_inrm_new = (arr_inrm_new / p_std).T
-        arr_inrm = arr_inrm_new
-
-    # -- subtract mean and divide by std. dev. feature-wise
-    if f_mean is not None:
-
-        f_mean = f_mean.reshape(f_size)
-        arr_inr_new = arr_inrm - f_mean
-
-        # -- slm_zca workaround
-        f_std = f_std.reshape(f_size)
-        arr_inr_new /= f_std
-
-        #arr_inr_new = np.dot(arr_inr_new, f_std)
-
-        arr_inrm = arr_inr_new
-
     # -- reshape arr_fb
     arr_fbm = arr_fb.reshape((f_size, fbn))
 
     # -- correlate !
     arr_out = np.dot(arr_inrm, arr_fbm)
+    # -- intercept
+    arr_out += incpts
 
+    arr_out += 3.6
+
+    #print 'mean filter response',  arr_out.mean()
     #import pdb; pdb.set_trace()
 
     arr_out = arr_out.reshape(n_imgs, n_tiles, outh, outw, -1)
 
-    assert arr_out.dtype == arr_in.dtype  # XXX: should go away
-
     return arr_out
-
-
-#try:
-#    fbcorr5 = profile(fbcorr5)
-#except NameError:
-#    pass

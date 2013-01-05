@@ -11,7 +11,7 @@ import numexpr as ne
 from pprint import pprint
 
 from sthor.operation.sandbox import lcdnorm5
-from sthor.operation.sandbox import fbcorr5
+from sthor.operation.sandbox import fbcorr5_incpt
 from sthor.operation.sandbox import lpool5
 
 DTYPE = np.float32
@@ -103,8 +103,7 @@ def _get_shape_stride_by_layer(slm_description, in_shape):
 
 class BatchSequentialLayeredModel(object):
 
-    def __init__(self, in_shape, description, filterbanks=None,
-                 fb_mean=None, fb_std=None):
+    def __init__(self, in_shape, description, filterbanks, intercepts):
 
         pprint(description)
 
@@ -114,88 +113,16 @@ class BatchSequentialLayeredModel(object):
 
         self.n_layers = len(description)
 
-        #if self.n_layers == 4:
-        #if self.n_layers == 3: # patch for convnet
-        #    self.filterbanks = [[]] # layer 0 has no filter bank
-        #else:
-
         self.shape_stride_by_layer = _get_shape_stride_by_layer(description,
                                                                 in_shape)
 
-        if filterbanks is not None:
-            self.filterbanks = filterbanks
-            self.fb_mean = fb_mean
-            self.fb_std = fb_std
-        else:
-            if self.n_layers == 4:
-                self.filterbanks = [[]] # layer 0 has no filter bank
-            else:
-                self.filterbanks = []
+        self.filterbanks = filterbanks
+        self.intercepts = intercepts
 
-            self.fb_mean = None
-            self.fb_std = None
-
-            # -- set filters
-            self._fit()
-
-        print 'GIOVANI: remote intersect subtraction in fbcorr'
         # -- this is the working array, that will be used throughout object
         #    methods. its purpose is to avoid a large memory footprint due
         #    to modularization.
         self.arr_w = None
-
-    def _fit(self):
-
-        desc = self.description
-
-        # -- filter bank must be empty
-        assert len(self.filterbanks) in (0,1)
-
-        for layer_idx in xrange(len(self.filterbanks), len(desc)):
-
-            if layer_idx == 0:
-                n_f_in = self.in_shape[-1]
-            else:
-                n_f_in = self.shape_stride_by_layer[layer_idx-1][4]
-
-            l_desc = desc[layer_idx]
-            op_name, f_desc = l_desc[0] # fg11-type slm
-            #f_desc = l_desc[0][1] 
-
-            if op_name != 'fbcorr':
-                self.filterbanks += []
-                continue
-
-            f_init = f_desc['initialize']
-            f_shape = f_init['filter_shape'] + (n_f_in,)
-            n_filters = f_init['n_filters']
-
-            generate = f_init['generate']
-            method_name, method_kwargs = generate
-            assert method_name == 'random:uniform'
-
-            rseed = method_kwargs.get('rseed', None)
-            self.rng_f = np.random.RandomState(rseed)
-
-            fb_shape = (n_filters,) + f_shape
-
-            fb = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
-
-            # -- zero-mean, unit-l2norm
-            for f_idx in xrange(n_filters):
-                filt = fb[f_idx]
-                filt -= filt.mean()
-                filt_norm = np.linalg.norm(filt)
-                assert filt_norm != 0
-                filt /= filt_norm
-                fb[f_idx] = filt
-
-            fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
-            self.filterbanks += [fb.copy()]
-
-        assert len(self.filterbanks) == len(desc)
-
-        return
 
 
     def transform(self, arr_in):
@@ -273,26 +200,18 @@ class BatchSequentialLayeredModel(object):
 
             if op_name == 'fbcorr':
                 fb = self.filterbanks[layer_idx]
-
-                if self.fb_mean is not None:
-                    f_mean = self.fb_mean[layer_idx]
-                    f_std = self.fb_std[layer_idx]
-                else:
-                    f_mean = None
-                    f_std = None
+                incpts = self.intercepts[layer_idx]
             else:
                 fb = None
-                f_mean = None
-                f_std = None
+                incpts = None
 
             self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w,
-                                              fb, f_mean, f_std)
+                                              fb, incpts)
 
         return
 
 
-    def _process_one_op(self, op_name, kwargs, arr_in,
-                        fb=None, f_mean=None, f_std=None):
+    def _process_one_op(self, op_name, kwargs, arr_in, fb=None, incpts=None):
 
         if op_name == 'lnorm':
 
@@ -313,6 +232,7 @@ class BatchSequentialLayeredModel(object):
         elif op_name == 'fbcorr':
 
             assert fb is not None
+            assert incpts is not None
 
             max_out = kwargs['max_out']
             min_out = kwargs['min_out']
@@ -320,20 +240,17 @@ class BatchSequentialLayeredModel(object):
             # -- filter
             assert arr_in.dtype == np.float32
 
-            tmp_out = fbcorr5(arr_in, fb, f_mean=f_mean, f_std=f_std)
+            tmp_out = fbcorr5_incpt(arr_in, fb, incpts)
 
             #import pdb; pdb.set_trace()
-            #tmp_out -= 0.58
 
             # -- activation
             min_out = -np.inf if min_out is None else min_out
             max_out = +np.inf if max_out is None else max_out
             # insure that the type is right before calling numexpr
             min_out = np.array([min_out], dtype=arr_in.dtype)
-            #min_out2 = np.array([0.0], dtype=arr_in.dtype)
             max_out = np.array([max_out], dtype=arr_in.dtype)
             # call numexpr
-            #tmp_out = ne.evaluate('where(tmp_out < min_out, min_out2, tmp_out)')
             tmp_out = ne.evaluate('where(tmp_out < min_out, min_out, tmp_out)')
             tmp_out = ne.evaluate('where(tmp_out > max_out, max_out, tmp_out)')
             assert tmp_out.dtype == arr_in.dtype
