@@ -31,6 +31,8 @@ N_PATCHES_P_IMG = 3
 RND_PATCHES = True
 PATCH_SAMPLE_SEED = 21
 
+INPUT_DEPTH = 1
+
 # ----------------
 # Helper functions
 # ----------------
@@ -90,7 +92,7 @@ def _get_rf_shape_stride_in_interval(slm_description,
 def _get_shape_stride_by_layer(slm_description, in_shape):
 
     to_return = []
-    tmp_shape = in_shape + (1,)
+    tmp_shape = in_shape + (INPUT_DEPTH,)
 
     for layer_idx, layer_desc in enumerate(slm_description):
 
@@ -293,7 +295,7 @@ class HierarchicalGenDiscModel(object):
                 arr_out[part_init:part_end] = self.arr_w
 
             t_elapsed = time.time() - t1
-            print 'Partiton %d out of %d processed in %g seconds...' % (
+            print 'Partition %d out of %d processed in %g seconds...' % (
                   part_idx + 1, n_partitions, t_elapsed)
 
         self.arr_w = None
@@ -696,7 +698,7 @@ class HierarchicalGenDiscModel(object):
 
         return filters, f_mean, f_std
 
-    # -- transform train neural images from layer x to layer x+1. both the 
+    # -- transform neural images from layer x to layer x+1. both the 
     #    input (except for layer 0) and the output are stored in disk
     #    (possibly in partitions) for two reasons: 
     #    (1) they may be used later to train models that are similiar up 
@@ -813,7 +815,7 @@ class HierarchicalGenDiscModel(object):
         n_imgs = self.arr_w.shape[0]
 
         if layer_idx == 0:
-            layer_in_shape = self.in_shape + (1,)
+            layer_in_shape = self.in_shape + (INPUT_DEPTH,)
         else:
             [tiles_h_in, tiles_w_in, _, _, tiles_d_in, _] = \
                                         self.shape_stride_by_layer[layer_idx-1]

@@ -104,7 +104,8 @@ def _get_shape_stride_by_layer(slm_description, in_shape):
 class BatchSequentialLayeredModel(object):
 
     def __init__(self, in_shape, description, filterbanks=None,
-                 fb_mean=None, fb_std=None):
+                 fb_mean=None, fb_std=None, fb_proj=None,
+                 fb_intercept=None, fb_offset=None):
 
         pprint(description)
 
@@ -114,31 +115,32 @@ class BatchSequentialLayeredModel(object):
 
         self.n_layers = len(description)
 
-        #if self.n_layers == 4:
-        #if self.n_layers == 3: # patch for convnet
-        #    self.filterbanks = [[]] # layer 0 has no filter bank
-        #else:
-
         self.shape_stride_by_layer = _get_shape_stride_by_layer(description,
                                                                 in_shape)
 
         if filterbanks is not None:
             self.filterbanks = filterbanks
+
             self.fb_mean = fb_mean
             self.fb_std = fb_std
+            self.fb_proj = fb_proj
+            self.fb_intercept = fb_intercept
+            self.fb_offset = fb_offset
         else:
-            if self.n_layers == 4:
+            if self.n_layers in (3, 4):
                 self.filterbanks = [[]] # layer 0 has no filter bank
             else:
                 self.filterbanks = []
 
             self.fb_mean = None
             self.fb_std = None
+            self.fb_proj = None
+            self.fb_intercept = None
+            self.fb_offset = None
 
             # -- set filters
             self._fit()
 
-        print 'GIOVANI: remote intersect subtraction in fbcorr'
         # -- this is the working array, that will be used throughout object
         #    methods. its purpose is to avoid a large memory footprint due
         #    to modularization.
@@ -160,7 +162,6 @@ class BatchSequentialLayeredModel(object):
 
             l_desc = desc[layer_idx]
             op_name, f_desc = l_desc[0] # fg11-type slm
-            #f_desc = l_desc[0][1] 
 
             if op_name != 'fbcorr':
                 self.filterbanks += []
@@ -257,6 +258,13 @@ class BatchSequentialLayeredModel(object):
         self.arr_w = None
         return arr_out
 
+    def _get_fb_data(self, layer_idx, fb_data):
+
+        if fb_data is not None:
+            return fb_data[layer_idx]
+        else:
+            return None
+
     # -- transform self.arr_w according to slm layer description.
     def _transform_layer(self, layer_idx, l_desc):
 
@@ -274,25 +282,31 @@ class BatchSequentialLayeredModel(object):
             if op_name == 'fbcorr':
                 fb = self.filterbanks[layer_idx]
 
-                if self.fb_mean is not None:
-                    f_mean = self.fb_mean[layer_idx]
-                    f_std = self.fb_std[layer_idx]
-                else:
-                    f_mean = None
-                    f_std = None
+                f_mean = self._get_fb_data(layer_idx, self.fb_mean)
+                f_std = self._get_fb_data(layer_idx, self.fb_std)
+                f_proj = self._get_fb_data(layer_idx, self.fb_proj)
+                f_intercept = self._get_fb_data(layer_idx, self.fb_intercept)
+                f_offset = self._get_fb_data(layer_idx, self.fb_offset)
+
             else:
                 fb = None
+
                 f_mean = None
                 f_std = None
+                f_proj = None
+                f_intercept = None
+                f_offset = None
 
-            self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w,
-                                              fb, f_mean, f_std)
+            self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w, fb,
+                                              f_mean, f_std, f_proj,
+                                              f_intercept, f_offset)
 
         return
 
 
-    def _process_one_op(self, op_name, kwargs, arr_in,
-                        fb=None, f_mean=None, f_std=None):
+    def _process_one_op(self, op_name, kwargs, arr_in, fb=None,
+                        f_mean=None, f_std=None, f_proj=None,
+                        f_intercept=None, f_offset=None):
 
         if op_name == 'lnorm':
 
@@ -320,10 +334,9 @@ class BatchSequentialLayeredModel(object):
             # -- filter
             assert arr_in.dtype == np.float32
 
-            tmp_out = fbcorr5(arr_in, fb, f_mean=f_mean, f_std=f_std)
-
-            #import pdb; pdb.set_trace()
-            #tmp_out -= 0.58
+            tmp_out = fbcorr5(arr_in, fb,
+                              f_mean=f_mean, f_std=f_std, f_proj=f_proj,
+                              f_intercept=f_intercept, f_offset=f_offset)
 
             # -- activation
             min_out = -np.inf if min_out is None else min_out
@@ -354,6 +367,7 @@ class BatchSequentialLayeredModel(object):
 
         return tmp_out
 
+
     def _mem_layer(self, layer_idx, n_imgs):
 
         [l_h, l_w, _, _, l_d, _] = self.shape_stride_by_layer[layer_idx]
@@ -369,6 +383,7 @@ class BatchSequentialLayeredModel(object):
             mem *= d
         # -- transform max_mem to gigabytes
         return float(mem) / 1024**3
+
 
     # -- determine if and how a hypothetical input array is going to be
     #    partitioned because its transformaiton exceeds memory limit

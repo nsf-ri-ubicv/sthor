@@ -18,9 +18,9 @@ def configuration(parent_package='', top_path=None):
         sources=['_resample.c'],
         include_dirs=[get_numpy_include_dirs()],
         extra_compile_args=[
-            "-fopenmp",
+            #"-fopenmp",
             "-pthread",
-            "-O6",
+            "-O3",
             "-march=native",
             "-mtune=native",
             "-funroll-all-loops",
@@ -31,7 +31,7 @@ def configuration(parent_package='', top_path=None):
             "-ftree-vectorize",
             "-ftree-vectorizer-verbose=5",
         ],
-        extra_link_args=['-fopenmp'],
+        #extra_link_args=['-fopenmp'],
         )
 
     return config

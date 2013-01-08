@@ -14,7 +14,8 @@ DEFAULT_STRIDE = 1
 
 
 def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, 
-            arr_out=None, f_mean=None, f_std=None):
+            arr_out=None, f_mean=None, f_std=None, f_proj=None,
+            f_intercept=None, f_offset=None):
 
     """5D Filterbank Correlation
     XXX: docstring
@@ -52,33 +53,24 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
     arr_inrm = arr_inr.reshape(n_imgs * n_tiles * outh * outw, f_size)
 
-    if arr_inrm.shape[1] == 3201:
-        print 'ok'
-        # -- kmeans and slm_zca workaround
-        #assert f_mean is None
+    if f_mean is not None:
+        arr_inrm = arr_inrm - f_mean
+
+    if f_std is not None:
+        arr_inrm = arr_inrm * (1. / f_std)
+
+    if f_proj is not None:
 
         # Contrast normalization
         p_mean = arr_inrm.mean(axis=1)
         p_std = arr_inrm.std(axis=1)
         p_std[p_std == 0.] = 1.
 
-        arr_inrm_new = (arr_inrm.T - p_mean)
-        arr_inrm_new = (arr_inrm_new / p_std).T
-        arr_inrm = arr_inrm_new
+        arr_inrm = (arr_inrm.T - p_mean)
+        arr_inrm = (arr_inrm / p_std).T
 
-    # -- subtract mean and divide by std. dev. feature-wise
-    if f_mean is not None:
-
-        f_mean = f_mean.reshape(f_size)
-        arr_inr_new = arr_inrm - f_mean
-
-        # -- slm_zca workaround
-        f_std = f_std.reshape(f_size)
-        arr_inr_new /= f_std
-
-        #arr_inr_new = np.dot(arr_inr_new, f_std)
-
-        arr_inrm = arr_inr_new
+        # Projection
+        arr_inrm = np.dot(arr_inrm, f_proj)
 
     # -- reshape arr_fb
     arr_fbm = arr_fb.reshape((f_size, fbn))
@@ -86,14 +78,17 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
     # -- correlate !
     arr_out = np.dot(arr_inrm, arr_fbm)
 
-    #import pdb; pdb.set_trace()
+    if f_intercept is not None:
+        arr_out += f_intercept
+
+    if f_offset is not None:
+        arr_out += f_offset
 
     arr_out = arr_out.reshape(n_imgs, n_tiles, outh, outw, -1)
 
     assert arr_out.dtype == arr_in.dtype  # XXX: should go away
 
     return arr_out
-
 
 #try:
 #    fbcorr5 = profile(fbcorr5)
