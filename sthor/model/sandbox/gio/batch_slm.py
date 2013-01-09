@@ -1,4 +1,4 @@
-"""Hierarchical Generative-Discriminative Model"""
+"""Batch SLM"""
 
 # Authors: Giovani Chiachia <giovani.chiachia@gmail.com>
 #
