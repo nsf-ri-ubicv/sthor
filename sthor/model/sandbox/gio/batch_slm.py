@@ -5,6 +5,7 @@
 # License: BSD
 
 import time
+import math
 import numpy as np
 import numexpr as ne
 
@@ -16,7 +17,7 @@ from sthor.operation.sandbox import lpool5
 
 DTYPE = np.float32
 MAX_MEM_GB = 20.
-PARTITION_SIZE = 35
+BATCH_SIZE = 35
 
 # ----------------
 # Helper functions
@@ -221,39 +222,39 @@ class BatchSequentialLayeredModel(object):
             raise ValueError("size of output array is greater than %s; " +
                              "the maximum allowed" % MAX_MEM_GB)
 
-        # -- determine if and how arr_in is partitioned
-        n_partitions, partitions = self._get_partitions(0, len(desc)-1, n_imgs)
-
-        for part_idx, (part_init, part_end) in enumerate(partitions):
+        n_batches = int(math.ceil(n_imgs / float(BATCH_SIZE)))
+        # -- iterate over batches
+        for b_idx, b_init in enumerate(xrange(0, n_imgs, BATCH_SIZE)):
+            b_end = min(b_init + BATCH_SIZE, n_imgs)
 
             t1 = time.time()
 
-            if n_partitions == 1:
+            if n_batches == 1:
                 self.arr_w = arr_in
                 self.arr_w.shape = (n_imgs, 1) + self.arr_w.shape[1:]
             else:
-                if part_idx == 0:
+                if b_idx == 0:
                     # -- initialize arr_out
                     [l_h, l_w, _, _, l_d, _] = \
                                     self.shape_stride_by_layer[self.n_layers-1]
 
                     arr_out = np.empty((n_imgs, 1, l_h, l_w, l_d), dtype=DTYPE)
 
-                self.arr_w = arr_in[part_init:part_end]
-                self.arr_w.shape = (part_end - part_init, 1) + \
+                self.arr_w = arr_in[b_init:b_end]
+                self.arr_w.shape = (b_end - b_init, 1) + \
                                     self.arr_w.shape[1:]
 
             for layer_idx, l_desc in enumerate(desc):
                 self._transform_layer(layer_idx, l_desc)
 
-            if n_partitions == 1:
+            if n_batches == 1:
                 arr_out = self.arr_w
             else:
-                arr_out[part_init:part_end] = self.arr_w
+                arr_out[b_init:b_end] = self.arr_w
 
             t_elapsed = time.time() - t1
-            print 'Partiton %d out of %d processed in %g seconds...' % (
-                  part_idx + 1, n_partitions, t_elapsed)
+            print 'Batch %d out of %d processed in %g seconds...' % (
+                  b_idx + 1, n_batches, t_elapsed)
 
         self.arr_w = None
         return arr_out
@@ -383,26 +384,3 @@ class BatchSequentialLayeredModel(object):
             mem *= d
         # -- transform max_mem to gigabytes
         return float(mem) / 1024**3
-
-
-    # -- determine if and how a hypothetical input array is going to be
-    #    partitioned because its transformaiton exceeds memory limit
-    def _get_partitions(self, layer_init, layer_end, n_imgs):
-
-        part_size = PARTITION_SIZE
-        n_partitions = int(n_imgs / float(part_size) + 1)
-
-        partitions = []
-        part_init = 0
-
-        # -- compute partition indices
-        for part_i in xrange(n_partitions):
-            partitions += [[part_init, part_init +  part_size]]
-            part_init += part_size
-
-        assert n_partitions == len(partitions)
-
-        if n_partitions > 0:
-            partitions[n_partitions-1][1] = n_imgs
-
-        return n_partitions, partitions
