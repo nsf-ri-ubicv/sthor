@@ -53,14 +53,7 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
     arr_inrm = arr_inr.reshape(n_imgs * n_tiles * outh * outw, f_size)
 
-    if f_mean is not None:
-        arr_inrm = arr_inrm - f_mean
-
-    if f_std is not None:
-        arr_inrm = arr_inrm * (1. / f_std)
-
     if f_proj is not None:
-
         # Contrast normalization
         p_mean = arr_inrm.mean(axis=1)
         p_std = arr_inrm.std(axis=1)
@@ -69,6 +62,13 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
         arr_inrm = (arr_inrm.T - p_mean)
         arr_inrm = (arr_inrm / p_std).T
 
+    if f_mean is not None:
+        arr_inrm = arr_inrm - f_mean
+
+    if f_std is not None:
+        arr_inrm = arr_inrm * (1. / f_std)
+
+    if f_proj is not None:
         # Projection
         arr_inrm = np.dot(arr_inrm, f_proj)
 
