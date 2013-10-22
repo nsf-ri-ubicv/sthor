@@ -128,10 +128,10 @@ class BatchSequentialLayeredModel(object):
             self.fb_intercept = fb_intercept
             self.fb_offset = fb_offset
         else:
-            if self.n_layers in (3, 4):
-                self.filterbanks = [[]] # layer 0 has no filter bank
-            else:
-                self.filterbanks = []
+            # if self.n_layers in (3, 4):
+            #     self.filterbanks = [[]] # layer 0 has no filter bank
+            # else:
+            self.filterbanks = []
 
             self.fb_mean = None
             self.fb_std = None
@@ -165,7 +165,7 @@ class BatchSequentialLayeredModel(object):
             op_name, f_desc = l_desc[0] # fg11-type slm
 
             if op_name != 'fbcorr':
-                self.filterbanks += []
+                self.filterbanks += [[]]
                 continue
 
             f_init = f_desc['initialize']
