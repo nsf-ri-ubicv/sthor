@@ -337,7 +337,7 @@ class BatchSequentialLayeredModel(object):
             # -- filter
             assert arr_in.dtype == np.float32
 
-            tmp_out = fbcorr5(arr_in, fb, f_contrast,
+            tmp_out = fbcorr5(arr_in, fb, f_contrast=f_contrast,
                               f_mean=f_mean, f_std=f_std, f_proj=f_proj,
                               f_intercept=f_intercept, f_offset=f_offset)
 
