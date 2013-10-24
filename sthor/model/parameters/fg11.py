@@ -13,6 +13,56 @@ lbp_ijcb = [
                   'threshold': 1}})]
 ]
 
+
+zak_012l = [
+    [[u'lnorm',
+      {u'kwargs': {u'inker_shape': [9, 9],
+                   u'outker_shape': [9, 9],
+                   u'remove_mean': False,
+                   u'stretch': 0.1,
+                   u'threshold': 1}}]],
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (9, 9),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 128},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [9, 9], u'order': 2, u'stride': 2}}],
+     [u'lnorm',
+      {u'kwargs': {u'inker_shape': [5, 5],
+                   u'outker_shape': [5, 5],
+                   u'remove_mean': False,
+                   u'stretch': 0.1,
+                   u'threshold': 10}}]],
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (3, 3),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 256},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [5, 5], u'order': 1, u'stride': 2}}],
+     [u'lnorm',
+      {u'kwargs': {u'inker_shape': [3, 3],
+                   u'outker_shape': [3, 3],
+                   u'remove_mean': False,
+                   u'stretch': 10,
+                   u'threshold': 1}}]]
+]
+
+zak_3l = [
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (3, 3),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 512},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [9, 9], u'order': 10, u'stride': 2}}],
+     [u'lnorm',
+      {u'kwargs': {u'inker_shape': [5, 5],
+                   u'outker_shape': [5, 5],
+                   u'remove_mean': True,
+                   u'stretch': 0.1,
+                   u'threshold': 0.1}}]]
+]
+
+
 fg11_012l = [
     [('lnorm',
       {'kwargs': {'inker_shape': [9, 9],
@@ -106,20 +156,44 @@ fg11_3l_nonorm = [
      ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}})]
 ]
 
-fg11_3l_filtering = [
-    [('fbcorr',
-      {'initialize': {'filter_shape': (5, 5),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 256},
-       'kwargs': {'max_out': None, 'min_out': 0}})]
-]
 
-fg11_3l_nonorm_linear = [
+
+fg11_256_nonorm = [
+    [('lnorm',
+      {'kwargs': {'inker_shape': [9, 9],
+                  'outker_shape': [9, 9],
+                  'remove_mean': False,
+                  'stretch': 10,
+                  'threshold': 1}})],
+    [('fbcorr',
+      {'initialize': {'filter_shape': (3, 3),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 64},
+       'kwargs': {'max_out': None, 'min_out': 0}}),
+     ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 1, 'stride': 2}}),
+     ('lnorm',
+      {'kwargs': {'inker_shape': [5, 5],
+                  'outker_shape': [5, 5],
+                  'remove_mean': False,
+                  'stretch': 0.1,
+                  'threshold': 1}})],
+    [('fbcorr',
+      {'initialize': {'filter_shape': (5, 5),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 128},
+       'kwargs': {'max_out': None, 'min_out': 0}}),
+     ('lpool', {'kwargs': {'ker_shape': [5, 5], 'order': 1, 'stride': 2}}),
+     ('lnorm',
+      {'kwargs': {'inker_shape': [7, 7],
+                  'outker_shape': [7, 7],
+                  'remove_mean': False,
+                  'stretch': 1,
+                  'threshold': 1}})],
     [('fbcorr',
       {'initialize': {'filter_shape': (5, 5),
                       'generate': ('random:uniform', {'rseed': 42}),
                       'n_filters': 256},
-       'kwargs': {'max_out': None, 'min_out': None}}),
+       'kwargs': {'max_out': None, 'min_out': 0}}),
      ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}})]
 ]
 
@@ -167,84 +241,6 @@ fg11_ht_l3_1_description = [
                   'remove_mean': False,
                   'stretch': 10,
                   'threshold': 1}})]
-]
-
-fg11_150_nonorm = [
-    [('lnorm',
-      {'kwargs': {'inker_shape': [9, 9],
-                  'outker_shape': [9, 9],
-                  'remove_mean': False,
-                  'stretch': 10,
-                  'threshold': 1}})],
-    [('fbcorr',
-      {'initialize': {'filter_shape': (3, 3),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 64},
-       'kwargs': {'max_out': None, 'min_out': 0}}),
-     ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 1, 'stride': 2}}),
-     ('lnorm',
-      {'kwargs': {'inker_shape': [5, 5],
-                  'outker_shape': [5, 5],
-                  'remove_mean': False,
-                  'stretch': 0.1,
-                  'threshold': 1}})],
-    [('fbcorr',
-      {'initialize': {'filter_shape': (5, 5),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 128},
-       'kwargs': {'max_out': None, 'min_out': 0}}),
-     ('lpool', {'kwargs': {'ker_shape': [5, 5], 'order': 1, 'stride': 2}}),
-     ('lnorm',
-      {'kwargs': {'inker_shape': [7, 7],
-                  'outker_shape': [7, 7],
-                  'remove_mean': False,
-                  'stretch': 1,
-                  'threshold': 1}})],
-    [('fbcorr',
-      {'initialize': {'filter_shape': (5, 5),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 150},
-       'kwargs': {'max_out': None, 'min_out': 0}}),
-     ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}})]
-]
-
-fg11_256_nonorm = [
-    [('lnorm',
-      {'kwargs': {'inker_shape': [9, 9],
-                  'outker_shape': [9, 9],
-                  'remove_mean': False,
-                  'stretch': 10,
-                  'threshold': 1}})],
-    [('fbcorr',
-      {'initialize': {'filter_shape': (3, 3),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 64},
-       'kwargs': {'max_out': None, 'min_out': 0}}),
-     ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 1, 'stride': 2}}),
-     ('lnorm',
-      {'kwargs': {'inker_shape': [5, 5],
-                  'outker_shape': [5, 5],
-                  'remove_mean': False,
-                  'stretch': 0.1,
-                  'threshold': 1}})],
-    [('fbcorr',
-      {'initialize': {'filter_shape': (5, 5),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 128},
-       'kwargs': {'max_out': None, 'min_out': 0}}),
-     ('lpool', {'kwargs': {'ker_shape': [5, 5], 'order': 1, 'stride': 2}}),
-     ('lnorm',
-      {'kwargs': {'inker_shape': [7, 7],
-                  'outker_shape': [7, 7],
-                  'remove_mean': False,
-                  'stretch': 1,
-                  'threshold': 1}})],
-    [('fbcorr',
-      {'initialize': {'filter_shape': (5, 5),
-                      'generate': ('random:uniform', {'rseed': 42}),
-                      'n_filters': 256},
-       'kwargs': {'max_out': None, 'min_out': 0}}),
-     ('lpool', {'kwargs': {'ker_shape': [7, 7], 'order': 10, 'stride': 2}})]
 ]
 
 

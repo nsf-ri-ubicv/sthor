@@ -14,8 +14,8 @@ DEFAULT_STRIDE = 1
 
 
 def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE, 
-            arr_out=None, f_mean=None, f_std=None, f_proj=None,
-            f_intercept=None, f_offset=None):
+            arr_out=None, f_constrast=None, f_mean=None, f_std=None,
+            f_proj=None, f_intercept=None, f_offset=None):
 
     """5D Filterbank Correlation
     XXX: docstring
@@ -53,7 +53,9 @@ def fbcorr5(arr_in, arr_fb, stride=DEFAULT_STRIDE,
 
     arr_inrm = arr_inr.reshape(n_imgs * n_tiles * outh * outw, f_size)
 
-    if f_proj is not None:
+    # -- this last term is for backwards compatibility
+    if f_constrast or f_proj is not None:
+
         # Contrast normalization
         p_mean = arr_inrm.mean(axis=1)
         p_std = arr_inrm.std(axis=1)

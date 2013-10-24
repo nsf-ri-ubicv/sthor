@@ -105,7 +105,7 @@ def _get_shape_stride_by_layer(slm_description, in_shape):
 class BatchSequentialLayeredModel(object):
 
     def __init__(self, in_shape, description, filterbanks=None,
-                 fb_mean=None, fb_std=None, fb_proj=None,
+                 contrast_norm=None, fb_mean=None, fb_std=None, fb_proj=None,
                  fb_intercept=None, fb_offset=None):
 
         pprint(description)
@@ -120,8 +120,9 @@ class BatchSequentialLayeredModel(object):
                                                                 in_shape)
 
         if filterbanks is not None:
-            self.filterbanks = filterbanks
 
+            self.filterbanks = filterbanks
+            self.contrast_norm = contrast_norm
             self.fb_mean = fb_mean
             self.fb_std = fb_std
             self.fb_proj = fb_proj
@@ -132,7 +133,7 @@ class BatchSequentialLayeredModel(object):
             #     self.filterbanks = [[]] # layer 0 has no filter bank
             # else:
             self.filterbanks = []
-
+            self.contrast_norm = None
             self.fb_mean = None
             self.fb_std = None
             self.fb_proj = None
@@ -283,6 +284,7 @@ class BatchSequentialLayeredModel(object):
             if op_name == 'fbcorr':
                 fb = self.filterbanks[layer_idx]
 
+                f_contrast = self._get_fb_data(layer_idx, self.contrast_norm)
                 f_mean = self._get_fb_data(layer_idx, self.fb_mean)
                 f_std = self._get_fb_data(layer_idx, self.fb_std)
                 f_proj = self._get_fb_data(layer_idx, self.fb_proj)
@@ -291,7 +293,7 @@ class BatchSequentialLayeredModel(object):
 
             else:
                 fb = None
-
+                f_contrast = None
                 f_mean = None
                 f_std = None
                 f_proj = None
@@ -299,15 +301,15 @@ class BatchSequentialLayeredModel(object):
                 f_offset = None
 
             self.arr_w = self._process_one_op(op_name, kwargs, self.arr_w, fb,
-                                              f_mean, f_std, f_proj,
-                                              f_intercept, f_offset)
+                                              f_contrast, f_mean, f_std,
+                                              f_proj, f_intercept, f_offset)
 
         return
 
 
     def _process_one_op(self, op_name, kwargs, arr_in, fb=None,
-                        f_mean=None, f_std=None, f_proj=None,
-                        f_intercept=None, f_offset=None):
+                        f_contrast=None, f_mean=None, f_std=None,
+                        f_proj=None, f_intercept=None, f_offset=None):
 
         if op_name == 'lnorm':
 
@@ -335,7 +337,7 @@ class BatchSequentialLayeredModel(object):
             # -- filter
             assert arr_in.dtype == np.float32
 
-            tmp_out = fbcorr5(arr_in, fb,
+            tmp_out = fbcorr5(arr_in, fb, f_contrast,
                               f_mean=f_mean, f_std=f_std, f_proj=f_proj,
                               f_intercept=f_intercept, f_offset=f_offset)
 
