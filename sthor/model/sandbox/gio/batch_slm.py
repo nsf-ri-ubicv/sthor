@@ -196,7 +196,7 @@ class BatchSequentialLayeredModel(object):
                     fb[f_idx] = filt
 
                 fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
-                self.filterbanks += [fb.copy()]
+                self.filterbanks[layer_idx] = fb.copy()
 
         return
 
