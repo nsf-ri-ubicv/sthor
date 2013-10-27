@@ -111,15 +111,21 @@ class BatchSequentialLayeredModel(object):
         pprint(description)
 
         self.description = description
-
         self.in_shape = in_shape
-
         self.n_layers = len(description)
 
         self.shape_stride_by_layer = _get_shape_stride_by_layer(description,
                                                                 in_shape)
 
         if filterbanks is not None:
+            # -- everybody has to have the same number of layers
+            assert len(filterbanks) == self.n_layers
+            assert len(contrast_norm) == self.n_layers
+            assert len(fb_mean) == self.n_layers
+            assert len(fb_std) == self.n_layers
+            assert len(fb_proj) == self.n_layers
+            assert len(fb_intercept) == self.n_layers
+            assert len(fb_offset) == self.n_layers
 
             self.filterbanks = filterbanks
             self.contrast_norm = contrast_norm
@@ -129,10 +135,7 @@ class BatchSequentialLayeredModel(object):
             self.fb_intercept = fb_intercept
             self.fb_offset = fb_offset
         else:
-            # if self.n_layers in (3, 4):
-            #     self.filterbanks = [[]] # layer 0 has no filter bank
-            # else:
-            self.filterbanks = []
+            self.filterbanks = [None] * self.n_layers
             self.contrast_norm = None
             self.fb_mean = None
             self.fb_std = None
@@ -152,51 +155,54 @@ class BatchSequentialLayeredModel(object):
 
         desc = self.description
 
-        # -- filter bank must be empty
-        assert len(self.filterbanks) in (0,1)
+        # -- each filterbanks item will contain either None (in which case it is
+        #    going to be filled with with random filters) or whatever type of
+        #    filterbank one may wish to set in the class instantiation 
+        #    (eg, k-mean-like)
+        assert len(self.filterbanks) == self.n_layers
 
-        for layer_idx in xrange(len(self.filterbanks), len(desc)):
+        for layer_idx in xrange(self.n_layers):
 
-            if layer_idx == 0:
-                n_f_in = self.in_shape[-1]
-            else:
-                n_f_in = self.shape_stride_by_layer[layer_idx-1][4]
+            if self.filterbanks[layer_idx] is None:
 
-            l_desc = desc[layer_idx]
-            op_name, f_desc = l_desc[0] # fg11-type slm
+                l_desc = desc[layer_idx]
+                op_name, f_desc = l_desc[0]
 
-            if op_name != 'fbcorr':
-                self.filterbanks += [[]]
-                continue
+                # we expect fbcorr to be the first operation of each layer
+                if op_name != 'fbcorr':
+                    continue
 
-            f_init = f_desc['initialize']
-            f_shape = f_init['filter_shape'] + (n_f_in,)
-            n_filters = f_init['n_filters']
+                if layer_idx == 0:
+                    n_f_in = self.in_shape[-1]
+                else:
+                    n_f_in = self.shape_stride_by_layer[layer_idx-1][4]
 
-            generate = f_init['generate']
-            method_name, method_kwargs = generate
-            assert method_name == 'random:uniform'
+                f_init = f_desc['initialize']
+                f_shape = f_init['filter_shape'] + (n_f_in,)
+                n_filters = f_init['n_filters']
 
-            rseed = method_kwargs.get('rseed', None)
-            self.rng_f = np.random.RandomState(rseed)
+                generate = f_init['generate']
+                method_name, method_kwargs = generate
+                assert method_name == 'random:uniform'
 
-            fb_shape = (n_filters,) + f_shape
+                rseed = method_kwargs.get('rseed', None)
+                self.rng_f = np.random.RandomState(rseed)
 
-            fb = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
+                fb_shape = (n_filters,) + f_shape
 
-            # -- zero-mean, unit-l2norm
-            for f_idx in xrange(n_filters):
-                filt = fb[f_idx]
-                filt -= filt.mean()
-                filt_norm = np.linalg.norm(filt)
-                assert filt_norm != 0
-                filt /= filt_norm
-                fb[f_idx] = filt
+                fb = self.rng_f.uniform(low=-1.0, high=1.0, size=fb_shape)
 
-            fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
-            self.filterbanks += [fb.copy()]
+                # -- zero-mean, unit-l2norm
+                for f_idx in xrange(n_filters):
+                    filt = fb[f_idx]
+                    filt -= filt.mean()
+                    filt_norm = np.linalg.norm(filt)
+                    assert filt_norm != 0
+                    filt /= filt_norm
+                    fb[f_idx] = filt
 
-        assert len(self.filterbanks) == len(desc)
+                fb = np.ascontiguousarray(np.rollaxis(fb, 0, 4)).astype(DTYPE)
+                self.filterbanks += [fb.copy()]
 
         return
 
