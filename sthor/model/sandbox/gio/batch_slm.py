@@ -117,39 +117,33 @@ class BatchSequentialLayeredModel(object):
         self.shape_stride_by_layer = _get_shape_stride_by_layer(description,
                                                                 in_shape)
 
-        if filterbanks is not None:
-            # -- everybody has to have the same number of layers
-            assert len(filterbanks) == self.n_layers
-            assert len(contrast_norm) == self.n_layers
-            assert len(fb_mean) == self.n_layers
-            assert len(fb_std) == self.n_layers
-            assert len(fb_proj) == self.n_layers
-            assert len(fb_intercept) == self.n_layers
-            assert len(fb_offset) == self.n_layers
-
-            self.filterbanks = filterbanks
-            self.contrast_norm = contrast_norm
-            self.fb_mean = fb_mean
-            self.fb_std = fb_std
-            self.fb_proj = fb_proj
-            self.fb_intercept = fb_intercept
-            self.fb_offset = fb_offset
+        if filterbanks is None:
+            self._set_slm_attr('filterbanks', [None] * self.n_layers)
         else:
-            self.filterbanks = [None] * self.n_layers
-            self.contrast_norm = None
-            self.fb_mean = None
-            self.fb_std = None
-            self.fb_proj = None
-            self.fb_intercept = None
-            self.fb_offset = None
+            self._set_slm_attr('filterbanks', filterbanks)
 
-            # -- set filters
-            self._fit()
+        self._set_slm_attr('contrast_norm', contrast_norm)
+        self._set_slm_attr('fb_mean', fb_mean)
+        self._set_slm_attr('fb_std', fb_std)
+        self._set_slm_attr('fb_proj', fb_proj)
+        self._set_slm_attr('fb_intercept', fb_intercept)
+        self._set_slm_attr('fb_offset', fb_offset)
+
+        # -- set remaining filters to random
+        self._fit()
 
         # -- this is the working array, that will be used throughout object
         #    methods. its purpose is to avoid a large memory footprint due
         #    to modularization.
         self.arr_w = None
+
+
+    def _set_slm_attr(self, attr, value):
+        if value is not None:
+            assert len(value) == self.n_layers
+
+        setattr(self, attr, value)
+
 
     def _fit(self):
 
