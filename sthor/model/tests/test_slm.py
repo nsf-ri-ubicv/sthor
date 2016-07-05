@@ -63,7 +63,6 @@ def test_no_description():
 
     assert slm.n_layers == 0
     assert slm.ops_nbh_nbw_stride == []
-    assert slm.receptive_field_shape == (1, 1)
 
 
 def test_L3_first_desc():
@@ -83,7 +82,7 @@ def test_L3_first_desc():
                                       ('fbcorr', 5, 5, 1),
                                       ('lpool', 7, 7, 2),
                                       ('lnorm', 3, 3, 1)]
-    assert slm.receptive_field_shape == (121, 121)
+    #assert slm.receptive_field_shape == (121, 121)
 
 
 def test_null_image_same_size_as_receptive_field():
@@ -168,3 +167,79 @@ def test_outout_with_interleave_and_stride_and_no_interleave():
     features = slm.process(img, pad_apron=True, interleave_stride=False)
 
     assert_allclose(features, full_features[::8, ::8], rtol=RTOL, atol=ATOL)
+
+
+desc = \
+[[('fbcorr',
+   {'initialize': {'filter_shape': (5, 5),
+                   'generate': ('random:uniform', {'rseed': 42}),
+                   'n_filters': 48},
+    'kwargs': {'max_out': None, 'min_out': 0}}),
+  ('lpool', {'kwargs': {'ker_shape': [2, 2], 'order': 10, 'stride': 2}})],
+ [('fbcorr',
+   {'initialize': {'filter_shape': (3, 3),
+                   'generate': ('random:uniform', {'rseed': 42}),
+                   'n_filters': 200},
+    'kwargs': {'max_out': None, 'min_out': 0}})]]
+
+
+def test_interleave_no_pad():
+
+    model = SequentialLayeredModel((512, 512), desc)
+
+    arr = np.random.randn(512, 512).astype('f')
+
+    features = model.process(arr, interleave_stride=True)
+
+    assert features.shape == (503, 503, 200)
+
+
+mydesc = [
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (5, 5),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 48},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [2, 2], u'order': 1, u'stride': 2}}]],
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (4, 4),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 48},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [2, 2], u'order': 1, u'stride': 2}}]],
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (4, 4),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 48},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [2, 2], u'order': 2, u'stride': 2}}]],
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (4, 4),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 48},
+       u'kwargs': {u'max_out': 1., u'min_out': 0}}],
+     [u'lpool', {u'kwargs': {u'ker_shape': [2, 2], u'order': 10, u'stride': 2}}]],
+    [[u'fbcorr',
+      {'initialize': {'filter_shape': (3, 3),
+                      'generate': ('random:uniform', {'rseed': 42}),
+                      'n_filters': 200},
+       u'kwargs': {u'max_out': None, u'min_out': 0}}]]
+]
+
+
+def test_get_in_shape():
+
+    from sthor.model.slm import _get_in_shape
+
+    out_shape = (512, 512)
+
+    success, in_shape, final_out_shape = _get_in_shape(out_shape,
+                                                       mydesc,
+                                                       interleave_stride=True)
+
+    assert success
+    assert in_shape == (605, 605)
+
+
+if __name__ == "__main__":
+  main()
